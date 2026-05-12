@@ -1,5 +1,6 @@
 import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
+import { updateWarnings, drawWarnings } from "./warning";
 
 const MAX_DT = 1 / 30; // 프레임 급락 시 dt를 최대 33ms로 제한 (튀는 이동 방지)
 
@@ -21,6 +22,10 @@ export function startGameLoop(
     // 배경 지우기
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
+
+    // 경고 영역 업데이트 및 렌더링 (플레이어 아래 레이어)
+    updateWarnings(dt);
+    drawWarnings(ctx, width, height);
 
     // 플레이어 업데이트 및 렌더링
     for (const player of players) {
