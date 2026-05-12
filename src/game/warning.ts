@@ -61,6 +61,17 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena]): void {
   }
 }
 
+// 플레이어가 체인 발동 시 상대 아레나에 경고 + 사슬 생성
+export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena]): void {
+  const arena = arenas[arenaIdx];
+  const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
+  const pad = Math.min(arena.w, arena.h) * 0.15;
+  const centerPos = orientation === "vertical"
+    ? arena.x + pad + Math.random() * (arena.w - pad * 2)
+    : arena.y + pad + Math.random() * (arena.h - pad * 2);
+  zones.push({ orientation, centerPos, arenaIdx, phase: "warning", elapsed: 0 });
+}
+
 // 경고 띠 직사각형 [x, y, w, h]
 function bandRect(z: Zone, arena: Arena): [number, number, number, number] {
   if (z.orientation === "vertical") {

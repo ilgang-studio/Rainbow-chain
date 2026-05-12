@@ -13,6 +13,8 @@ export interface Player {
     left: string;
     right: string;
   };
+  hasChain: boolean; // 체인 발동권 보유 여부
+  useKey: string;    // 체인 발동 키
 }
 
 // 각 플레이어를 자신의 아레나 중앙에 배치
@@ -26,6 +28,8 @@ export function createPlayers(arenas: [Arena, Arena]): [Player, Player] {
     speed: 300,
     color: "#ffffff",
     keys: { up: "w", down: "s", left: "a", right: "d" },
+    hasChain: false,
+    useKey: " ",      // Space
   };
 
   const player2: Player = {
@@ -35,6 +39,8 @@ export function createPlayers(arenas: [Arena, Arena]): [Player, Player] {
     speed: 300,
     color: "#ffffff",
     keys: { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" },
+    hasChain: false,
+    useKey: "Enter",  // Enter
   };
 
   return [player1, player2];
