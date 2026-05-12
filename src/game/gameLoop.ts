@@ -41,12 +41,15 @@ export function startGameLoop(
   }
 
   function checkCollisions(): void {
+    const CHAIN_LINK_R = 3; // warning.ts LINK_R와 동일
     for (const chain of getActiveChains()) {
-      const p       = players[chain.arenaIdx];
-      const arena   = arenas[chain.arenaIdx];
-      const isVert  = chain.orientation === "vertical";
-      const fullLen = isVert ? arena.h : arena.w;
-      const base    = isVert ? arena.y : arena.x;
+      const p          = players[chain.arenaIdx];
+      const arena      = arenas[chain.arenaIdx];
+      const isVert     = chain.orientation === "vertical";
+      const fullLen    = isVert ? arena.h : arena.w;
+      const base       = isVert ? arena.y : arena.x;
+      const adjBase    = base + CHAIN_LINK_R;
+      const adjMax     = base + fullLen - CHAIN_LINK_R;
 
       // 체인 중심선 거리 판정
       const dist = isVert
@@ -54,22 +57,22 @@ export function startGameLoop(
         : Math.abs(p.y - chain.centerPos);
       if (dist >= p.radius) continue;
 
-      // phase별 실제 충돌 구간 (아레나 내부 기준)
+      // phase별 실제 충돌 구간 (adjBase~adjMax 내부 기준)
       let segStart: number;
       let segEnd:   number;
       if (chain.phase === "extending") {
-        segStart = chain.direction === 1 ? base : base + fullLen - chain.drawLength;
+        segStart = chain.direction === 1 ? adjBase : adjMax - chain.drawLength;
         segEnd   = segStart + chain.drawLength;
       } else if (chain.phase === "active") {
-        segStart = base;
-        segEnd   = base + fullLen;
+        segStart = adjBase;
+        segEnd   = adjMax;
       } else { // exiting — 아레나 밖으로 나간 부분 제외
         if (chain.direction === 1) {
-          segStart = base + chain.exitOffset;
-          segEnd   = base + fullLen;
+          segStart = adjBase + chain.exitOffset;
+          segEnd   = adjMax;
         } else {
-          segStart = base;
-          segEnd   = base + fullLen - chain.exitOffset;
+          segStart = adjBase;
+          segEnd   = adjMax - chain.exitOffset;
         }
       }
 
