@@ -51,14 +51,13 @@ export function updatePlayer(player: Player, dt: number, canvasWidth: number, ca
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: Player): void {
+  ctx.save();
+  // 네온 글로우 효과: shadowBlur를 fill 전에 설정해야 적용됨
+  ctx.shadowColor = player.color;
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = player.color;
   ctx.beginPath();
   ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-  ctx.fillStyle = player.color;
   ctx.fill();
-
-  // 네온 글로우 효과 (shadowBlur)
-  ctx.shadowColor = player.color;
-  ctx.shadowBlur = 18;
-  ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.restore(); // shadowBlur 등 상태 오염 방지
 }

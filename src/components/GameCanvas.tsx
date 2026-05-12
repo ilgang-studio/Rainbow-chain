@@ -35,10 +35,12 @@ export default function GameCanvas() {
       style={{
         display: "block",
         background: "#000",
-        // Canvas를 뷰포트 전체에 꽉 채움
         position: "fixed",
         top: 0,
         left: 0,
+        // CSS 크기를 명시적으로 지정 (canvas 기본값 300×150 방지)
+        width: "100vw",
+        height: "100vh",
       }}
     />
   );

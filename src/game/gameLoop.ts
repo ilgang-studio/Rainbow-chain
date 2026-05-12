@@ -1,4 +1,5 @@
-import { Player, updatePlayer, drawPlayer } from "./player";
+import type { Player } from "./player";
+import { updatePlayer, drawPlayer } from "./player";
 
 const MAX_DT = 1 / 30; // 프레임 급락 시 dt를 최대 33ms로 제한 (튀는 이동 방지)
 
