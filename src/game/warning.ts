@@ -1,5 +1,5 @@
-// 체인 경고 + 사슬 시스템
-// 경고는 "사슬이 지나갈 위치 예고"이며, 실제 위험 판정은 중앙선 기준
+// 체인 경고 + 사슬 시스템 (성능 최적화)
+// shadowBlur 제거, 링크 경로 일괄 stroke, save/restore 최소화
 
 import type { Arena } from "./arena";
 
@@ -8,21 +8,30 @@ type Phase = "warning" | "flash" | "chain";
 
 export interface Zone {
   orientation: Orientation;
-  centerPos: number;   // vertical → x좌표, horizontal → y좌표
+  centerPos: number;
   arenaIdx: 0 | 1;
   phase: Phase;
   elapsed: number;
 }
 
-const WARNING_DURATION = 1.8;  // 경고 띠 표시 시간 (초)
-const FLASH_DURATION   = 0.5;  // 마지막 깜빡임 시간 (초)
-const CHAIN_DURATION   = 2.8;  // 사슬 유지 시간 (초)
-const SPAWN_INTERVAL   = 4.0;  // 경고 생성 주기 (초)
-const BAND_HALF_WIDTH  = 24;   // 경고 띠 반폭 (px)
+const WARNING_DURATION = 1.8;
+const FLASH_DURATION   = 0.5;
+const CHAIN_DURATION   = 2.8;
+const SPAWN_INTERVAL   = 4.0;
+const BAND_HALF_WIDTH  = 24;
 
 const zones: Zone[] = [];
-// 두 아레나 타이머를 엇갈려 시작 (동시 등장 방지)
 const spawnTimers: [number, number] = [1.2, SPAWN_INTERVAL * 0.5 + 0.9];
+
+// filter() 대신 재사용 버퍼로 매 프레임 배열 할당 제거
+const _chainBuf: Zone[] = [];
+export function getActiveChains(): Zone[] {
+  _chainBuf.length = 0;
+  for (let i = 0; i < zones.length; i++) {
+    if (zones[i].phase === "chain") _chainBuf.push(zones[i]);
+  }
+  return _chainBuf;
+}
 
 export function resetWarnings(): void {
   zones.length = 0;
@@ -30,12 +39,6 @@ export function resetWarnings(): void {
   spawnTimers[1] = SPAWN_INTERVAL * 0.5 + 0.9;
 }
 
-// 충돌 판정용: chain 단계 Zone만 반환
-export function getActiveChains(): Zone[] {
-  return zones.filter(z => z.phase === "chain");
-}
-
-// 게임 시간에 따라 생성 주기를 단축 (최소 1.2초)
 function currentSpawnInterval(gameTime: number): number {
   return Math.max(1.2, SPAWN_INTERVAL - gameTime * 0.05);
 }
@@ -45,16 +48,13 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
   for (let i = 0; i < 2; i++) {
     spawnTimers[i] += dt;
     if (spawnTimers[i] < interval) continue;
-
     spawnTimers[i] = 0;
     const arena = arenas[i];
     const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
-    // 아레나 가장자리 15% 여백 안쪽 랜덤 위치
     const pad = Math.min(arena.w, arena.h) * 0.15;
     const centerPos = orientation === "vertical"
       ? arena.x + pad + Math.random() * (arena.w - pad * 2)
       : arena.y + pad + Math.random() * (arena.h - pad * 2);
-
     zones.push({ orientation, centerPos, arenaIdx: i as 0 | 1, phase: "warning", elapsed: 0 });
   }
 
@@ -67,7 +67,6 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
   }
 }
 
-// 플레이어가 체인 발동 시 상대 아레나에 경고 + 사슬 생성
 export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena]): void {
   const arena = arenas[arenaIdx];
   const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
@@ -78,34 +77,27 @@ export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena]): void {
   zones.push({ orientation, centerPos, arenaIdx, phase: "warning", elapsed: 0 });
 }
 
-// 경고 띠 직사각형 [x, y, w, h]
-function bandRect(z: Zone, arena: Arena): [number, number, number, number] {
-  if (z.orientation === "vertical") {
-    return [z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h];
-  }
-  return [arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2];
-}
+// ── 내부 렌더 헬퍼 ────────────────────────────────────────────────────────────
 
-// 반투명 띠 + 중앙선 그리기 (warning / flash 단계 공용)
+// 경고 띠 + 중앙선 (shadowBlur 없음, save/restore 없음 — 호출부에서 관리)
 function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
-  const [rx, ry, rw, rh] = bandRect(z, arena);
+  const isVert = z.orientation === "vertical";
 
   // 반투명 빨간 띠
-  ctx.save();
   ctx.globalAlpha = alpha * 0.28;
-  ctx.fillStyle = "#cc0000";
-  ctx.fillRect(rx, ry, rw, rh);
-  ctx.restore();
+  ctx.fillStyle   = "#cc0000";
+  if (isVert) {
+    ctx.fillRect(z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
+  } else {
+    ctx.fillRect(arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
+  }
 
-  // 중앙선 (더 진하게 — "실제 위험 위치" 표시)
-  ctx.save();
-  ctx.globalAlpha = alpha * 0.88;
-  ctx.strokeStyle = "#ff4422";
-  ctx.lineWidth = 2;
-  ctx.shadowColor = "#ff2200";
-  ctx.shadowBlur = 14;
+  // 중앙선 (더 밝은 색으로 위험 위치 표시 — glow 대신 색상으로 대체)
+  ctx.globalAlpha  = alpha * 0.88;
+  ctx.strokeStyle  = "#ff5533";
+  ctx.lineWidth    = 2;
   ctx.beginPath();
-  if (z.orientation === "vertical") {
+  if (isVert) {
     ctx.moveTo(z.centerPos, arena.y);
     ctx.lineTo(z.centerPos, arena.y + arena.h);
   } else {
@@ -113,10 +105,10 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
     ctx.lineTo(arena.x + arena.w, z.centerPos);
   }
   ctx.stroke();
-  ctx.restore();
 }
 
-// 사슬 링크 그리기 (chain 단계)
+// 사슬 링크 — 모든 호 + 연결선을 단일 beginPath → stroke() 로 처리
+// (링크당 stroke 호출 제거: ~60 draw call → 1 draw call per chain)
 function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
   const isVert  = z.orientation === "vertical";
   const lineLen = isVert ? arena.h : arena.w;
@@ -125,48 +117,44 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, al
   const linkR   = 4;
   const spacing = 16;
   const count   = Math.floor(lineLen / spacing);
-  const startPos = base + (lineLen - count * spacing) / 2 + spacing / 2;
+  const start   = base + (lineLen - count * spacing) / 2 + spacing / 2;
 
-  ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = "#ff6020";
-  ctx.lineWidth = 2;
-  ctx.shadowColor = "#ff4000";
-  ctx.shadowBlur = 14;
+  ctx.strokeStyle = "#ff6633";
+  ctx.lineWidth   = 2;
 
+  // 링크 원 + 연결선을 하나의 경로로 일괄 처리
+  ctx.beginPath();
   for (let i = 0; i < count; i++) {
-    const pos = startPos + i * spacing;
+    const pos = start + i * spacing;
     const cx = isVert ? z.centerPos : pos;
     const cy = isVert ? pos : z.centerPos;
 
-    // 링크 원
-    ctx.beginPath();
+    // moveTo로 이전 점과의 자동 연결 방지
+    ctx.moveTo(cx + linkR, cy);
     ctx.arc(cx, cy, linkR, 0, Math.PI * 2);
-    ctx.stroke();
 
-    // 연결선
     if (i < count - 1) {
-      const npos = startPos + (i + 1) * spacing;
+      const npos = start + (i + 1) * spacing;
       const nx = isVert ? z.centerPos : npos;
       const ny = isVert ? npos : z.centerPos;
-      ctx.beginPath();
-      ctx.moveTo(isVert ? cx : cx + linkR, isVert ? cy + linkR : cy);
-      ctx.lineTo(isVert ? nx : nx - linkR, isVert ? ny - linkR : ny);
-      ctx.stroke();
+      ctx.moveTo(isVert ? cx         : cx + linkR, isVert ? cy + linkR : cy);
+      ctx.lineTo(isVert ? nx         : nx - linkR, isVert ? ny - linkR : ny);
     }
   }
-  ctx.restore();
+  ctx.stroke(); // 전체 체인 단 1회 stroke
 }
 
+// ── 메인 렌더 ─────────────────────────────────────────────────────────────────
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
+  // shadowBlur가 외부에서 설정된 경우 초기화
+  ctx.shadowBlur = 0;
+
   for (const z of zones) {
     const arena = arenas[z.arenaIdx];
 
-    // 아레나 경계 밖으로 넘치지 않도록 클리핑
+    // 존당 save/restore 1회 (clip 제거: 15% 패딩으로 아레나 경계 자동 보장)
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(arena.x, arena.y, arena.w, arena.h);
-    ctx.clip();
 
     if (z.phase === "warning") {
       drawBand(ctx, z, arena, z.elapsed / WARNING_DURATION);
@@ -181,16 +169,18 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       const fade = progress > 0.8 ? 1 - (progress - 0.8) / 0.2 : 1.0;
 
       // 잔여 띠 (매우 연하게)
-      const [rx, ry, rw, rh] = bandRect(z, arena);
-      ctx.save();
+      const isVert = z.orientation === "vertical";
       ctx.globalAlpha = fade * 0.10;
-      ctx.fillStyle = "#770000";
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.restore();
+      ctx.fillStyle   = "#770000";
+      if (isVert) {
+        ctx.fillRect(z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
+      } else {
+        ctx.fillRect(arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
+      }
 
       drawChainLinks(ctx, z, arena, fade);
     }
 
-    ctx.restore(); // clip 해제
+    ctx.restore(); // globalAlpha 자동 복원
   }
 }
