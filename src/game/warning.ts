@@ -1,7 +1,7 @@
 import type { Arena } from "./arena";
 
 export type Orientation = "horizontal" | "vertical";
-type Phase = "warning" | "flash" | "chain";
+type Phase = "warning" | "flash" | "extending" | "active" | "exiting";
 
 export interface Zone {
   orientation: Orientation;
@@ -10,15 +10,15 @@ export interface Zone {
   phase:       Phase;
   elapsed:     number;
   direction:   1 | -1;   // 1: top/left→bottom/right, -1: 반대
-  drawLength:  number;   // 현재 뻗어나간 길이 (px), chain 단계에서만 유효
+  drawLength:  number;   // extending 단계: 현재 뻗은 길이
+  exitOffset:  number;   // exiting 단계: 진행 방향으로 이동한 거리
 }
 
 const WARNING_DURATION    = 1.8;
 const FLASH_DURATION      = 0.5;
-const EXTEND_DURATION     = 0.45;  // 체인이 끝까지 뻗는 시간
-const HOLD_DURATION       = 1.95;  // 완전히 뻗은 뒤 유지
-const FADE_DURATION       = 0.4;   // 사라지는 시간
-const CHAIN_DURATION      = EXTEND_DURATION + HOLD_DURATION + FADE_DURATION; // 2.8
+const EXTEND_DURATION     = 0.45;  // 한쪽 벽 → 반대 벽까지 뻗는 시간
+const ACTIVE_DURATION     = 1.8;   // 완전히 뻗은 뒤 유지 시간
+const EXIT_DURATION       = 0.45;  // 아레나 밖으로 날아가는 시간 (같은 속도)
 const SPAWN_INTERVAL      = 4.0;
 const BAND_HALF_WIDTH     = 24;
 const MAX_ZONES_PER_ARENA = 6;
@@ -30,7 +30,10 @@ const _chainBuf: Zone[] = [];
 export function getActiveChains(): Zone[] {
   _chainBuf.length = 0;
   for (let i = 0; i < zones.length; i++) {
-    if (zones[i].phase === "chain") _chainBuf.push(zones[i]);
+    const ph = zones[i].phase;
+    if (ph === "extending" || ph === "active" || ph === "exiting") {
+      _chainBuf.push(zones[i]);
+    }
   }
   return _chainBuf;
 }
@@ -58,7 +61,11 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena): void {
     ? arena.x + pad + Math.random() * (arena.w - pad * 2)
     : arena.y + pad + Math.random() * (arena.h - pad * 2);
   const direction: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
-  zones.push({ orientation, centerPos, arenaIdx, phase: "warning", elapsed: 0, direction, drawLength: 0 });
+  zones.push({
+    orientation, centerPos, arenaIdx,
+    phase: "warning", elapsed: 0,
+    direction, drawLength: 0, exitOffset: 0,
+  });
 }
 
 export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: number): void {
@@ -83,15 +90,26 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
 
     if (z.phase === "warning") {
       if (z.elapsed >= WARNING_DURATION) { z.phase = "flash"; z.elapsed = 0; }
+
     } else if (z.phase === "flash") {
-      if (z.elapsed >= FLASH_DURATION) { z.phase = "chain"; z.elapsed = 0; z.drawLength = 0; }
-    } else { // chain
+      if (z.elapsed >= FLASH_DURATION) { z.phase = "extending"; z.elapsed = 0; z.drawLength = 0; }
+
+    } else if (z.phase === "extending") {
       const arena   = arenas[z.arenaIdx];
       const fullLen = z.orientation === "vertical" ? arena.h : arena.w;
-      z.drawLength  = z.elapsed < EXTEND_DURATION
-        ? fullLen * (z.elapsed / EXTEND_DURATION)
-        : fullLen;
-      if (z.elapsed >= CHAIN_DURATION) zones.splice(i, 1);
+      z.drawLength  = Math.min(fullLen, fullLen * (z.elapsed / EXTEND_DURATION));
+      if (z.elapsed >= EXTEND_DURATION) {
+        z.phase = "active"; z.elapsed = 0; z.drawLength = fullLen;
+      }
+
+    } else if (z.phase === "active") {
+      if (z.elapsed >= ACTIVE_DURATION) { z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0; }
+
+    } else { // exiting
+      const arena   = arenas[z.arenaIdx];
+      const fullLen = z.orientation === "vertical" ? arena.h : arena.w;
+      z.exitOffset  = fullLen * (z.elapsed / EXIT_DURATION);
+      if (z.exitOffset >= fullLen) zones.splice(i, 1);
     }
   }
 }
@@ -128,52 +146,63 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
   ctx.stroke();
 }
 
-// 사슬 링크 — 라운드캡 선분 교대 배치 (가로/세로 타원형 고리 느낌)
-// 뻗어나간 segStart~segEnd 구간만 그린다. 단일 stroke() 1회.
-function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
+// 사슬 링크 — 라운드캡 선분 교대 배치 (타원형 고리 느낌), 단일 stroke()
+// phase에 따라 chainStart를 결정; exiting은 호출부에서 ctx.clip() 처리
+function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
   const isVert  = z.orientation === "vertical";
   const fullLen = isVert ? arena.h : arena.w;
   const base    = isVert ? arena.y : arena.x;
 
-  const segStart = z.direction === 1 ? base : base + fullLen - z.drawLength;
-  const segEnd   = segStart + z.drawLength;
+  // 체인 시작 위치와 길이 계산
+  let chainStart: number;
+  let chainLen: number;
 
-  const SPACING  = 10;  // 링크 중심 간격
-  const HL       = 4;   // 링크 절반 길이 (타원 장축)
-  const HW       = 1.5; // 링크 절반 굵기 (lineWidth)
+  if (z.phase === "extending") {
+    chainLen  = z.drawLength;
+    chainStart = z.direction === 1 ? base : base + fullLen - chainLen;
+  } else if (z.phase === "active") {
+    chainLen  = fullLen;
+    chainStart = base;
+  } else { // exiting: 같은 방향으로 이동
+    chainLen  = fullLen;
+    chainStart = z.direction === 1
+      ? base + z.exitOffset
+      : base - z.exitOffset;
+  }
 
-  ctx.globalAlpha = alpha;
+  if (chainLen <= 0) return;
+
+  const SPACING = 10;
+  const HL      = 4;   // 링크 절반 길이
+  const HW      = 1.5; // 링크 절반 굵기
+
+  ctx.globalAlpha = 1.0;
   ctx.strokeStyle = "#c8c8c8";
   ctx.lineWidth   = HW * 2;
   ctx.lineCap     = "round";
 
   ctx.beginPath();
   let idx = 0;
-  for (let pos = segStart; pos <= segEnd; pos += SPACING) {
+  for (let pos = chainStart; pos <= chainStart + chainLen; pos += SPACING, idx++) {
     if (isVert) {
       if (idx % 2 === 0) {
-        // 가로 타원 링크 (세로 체인의 짝수)
         ctx.moveTo(z.centerPos - HL, pos);
         ctx.lineTo(z.centerPos + HL, pos);
       } else {
-        // 세로 타원 링크 (세로 체인의 홀수)
         ctx.moveTo(z.centerPos, pos - HL);
         ctx.lineTo(z.centerPos, pos + HL);
       }
     } else {
       if (idx % 2 === 0) {
-        // 세로 타원 링크 (가로 체인의 짝수)
         ctx.moveTo(pos, z.centerPos - HL);
         ctx.lineTo(pos, z.centerPos + HL);
       } else {
-        // 가로 타원 링크 (가로 체인의 홀수)
         ctx.moveTo(pos - HL, z.centerPos);
         ctx.lineTo(pos + HL, z.centerPos);
       }
     }
-    idx++;
   }
-  ctx.stroke(); // 전체 단 1회
+  ctx.stroke();
 }
 
 // ── 메인 렌더 ────────────────────────────────────────────────────────────────
@@ -191,12 +220,14 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       const pulse = 0.5 + 0.5 * Math.sin((z.elapsed / FLASH_DURATION) * Math.PI * 10);
       drawBand(ctx, z, arena, pulse);
 
-    } else { // chain — 띠 없이 링크만, 끝에서 fade-out
-      const fadeStart = EXTEND_DURATION + HOLD_DURATION;
-      const alpha = z.elapsed > fadeStart
-        ? Math.max(0, 1 - (z.elapsed - fadeStart) / FADE_DURATION)
-        : 1.0;
-      if (z.drawLength > 0) drawChainLinks(ctx, z, arena, alpha);
+    } else if (z.phase === "extending" || z.phase === "active") {
+      drawChainLinks(ctx, z, arena);
+
+    } else { // exiting — 아레나 외부로 나가는 부분을 clip으로 차단
+      ctx.beginPath();
+      ctx.rect(arena.x, arena.y, arena.w, arena.h);
+      ctx.clip();
+      drawChainLinks(ctx, z, arena);
     }
 
     ctx.restore();

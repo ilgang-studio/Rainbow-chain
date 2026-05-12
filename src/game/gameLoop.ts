@@ -42,21 +42,38 @@ export function startGameLoop(
 
   function checkCollisions(): void {
     for (const chain of getActiveChains()) {
-      const p     = players[chain.arenaIdx];
-      const arena = arenas[chain.arenaIdx];
+      const p       = players[chain.arenaIdx];
+      const arena   = arenas[chain.arenaIdx];
+      const isVert  = chain.orientation === "vertical";
+      const fullLen = isVert ? arena.h : arena.w;
+      const base    = isVert ? arena.y : arena.x;
 
       // 체인 중심선 거리 판정
-      const dist = chain.orientation === "vertical"
+      const dist = isVert
         ? Math.abs(p.x - chain.centerPos)
         : Math.abs(p.y - chain.centerPos);
       if (dist >= p.radius) continue;
 
-      // 실제로 뻗어나간 구간에만 판정
-      const fullLen  = chain.orientation === "vertical" ? arena.h : arena.w;
-      const base     = chain.orientation === "vertical" ? arena.y : arena.x;
-      const segStart = chain.direction === 1 ? base : base + fullLen - chain.drawLength;
-      const segEnd   = segStart + chain.drawLength;
-      const along    = chain.orientation === "vertical" ? p.y : p.x;
+      // phase별 실제 충돌 구간 (아레나 내부 기준)
+      let segStart: number;
+      let segEnd:   number;
+      if (chain.phase === "extending") {
+        segStart = chain.direction === 1 ? base : base + fullLen - chain.drawLength;
+        segEnd   = segStart + chain.drawLength;
+      } else if (chain.phase === "active") {
+        segStart = base;
+        segEnd   = base + fullLen;
+      } else { // exiting — 아레나 밖으로 나간 부분 제외
+        if (chain.direction === 1) {
+          segStart = base + chain.exitOffset;
+          segEnd   = base + fullLen;
+        } else {
+          segStart = base;
+          segEnd   = base + fullLen - chain.exitOffset;
+        }
+      }
+
+      const along = isVert ? p.y : p.x;
       if (along + p.radius < segStart || along - p.radius > segEnd) continue;
 
       isGameOver = true;
