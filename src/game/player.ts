@@ -1,4 +1,5 @@
 import { isKeyDown } from "./input";
+import type { Arena } from "./arena";
 
 export interface Player {
   x: number;
@@ -6,7 +7,6 @@ export interface Player {
   radius: number;
   speed: number; // px/sec
   color: string;
-  // 각 플레이어의 이동 키 바인딩
   keys: {
     up: string;
     down: string;
@@ -15,10 +15,13 @@ export interface Player {
   };
 }
 
-export function createPlayers(canvasWidth: number, canvasHeight: number): [Player, Player] {
+// 각 플레이어를 자신의 아레나 중앙에 배치
+export function createPlayers(arenas: [Arena, Arena]): [Player, Player] {
+  const [a1, a2] = arenas;
+
   const player1: Player = {
-    x: canvasWidth * 0.35,
-    y: canvasHeight / 2,
+    x: a1.x + a1.w / 2,
+    y: a1.y + a1.h / 2,
     radius: 16,
     speed: 300,
     color: "#ffffff",
@@ -26,8 +29,8 @@ export function createPlayers(canvasWidth: number, canvasHeight: number): [Playe
   };
 
   const player2: Player = {
-    x: canvasWidth * 0.65,
-    y: canvasHeight / 2,
+    x: a2.x + a2.w / 2,
+    y: a2.y + a2.h / 2,
     radius: 16,
     speed: 300,
     color: "#ffffff",
@@ -37,7 +40,8 @@ export function createPlayers(canvasWidth: number, canvasHeight: number): [Playe
   return [player1, player2];
 }
 
-export function updatePlayer(player: Player, dt: number, canvasWidth: number, canvasHeight: number): void {
+// 이동 경계를 아레나 안으로 제한
+export function updatePlayer(player: Player, dt: number, arena: Arena): void {
   const dist = player.speed * dt;
 
   if (isKeyDown(player.keys.up))    player.y -= dist;
@@ -45,19 +49,17 @@ export function updatePlayer(player: Player, dt: number, canvasWidth: number, ca
   if (isKeyDown(player.keys.left))  player.x -= dist;
   if (isKeyDown(player.keys.right)) player.x += dist;
 
-  // 화면 경계 클램핑 (플레이어가 화면 밖으로 나가지 않음)
-  player.x = Math.max(player.radius, Math.min(canvasWidth  - player.radius, player.x));
-  player.y = Math.max(player.radius, Math.min(canvasHeight - player.radius, player.y));
+  player.x = Math.max(arena.x + player.radius, Math.min(arena.x + arena.w - player.radius, player.x));
+  player.y = Math.max(arena.y + player.radius, Math.min(arena.y + arena.h - player.radius, player.y));
 }
 
 export function drawPlayer(ctx: CanvasRenderingContext2D, player: Player): void {
   ctx.save();
-  // 네온 글로우 효과: shadowBlur를 fill 전에 설정해야 적용됨
   ctx.shadowColor = player.color;
   ctx.shadowBlur = 20;
   ctx.fillStyle = player.color;
   ctx.beginPath();
   ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.restore(); // shadowBlur 등 상태 오염 방지
+  ctx.restore();
 }

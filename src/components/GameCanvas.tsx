@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { initInput } from "../game/input";
+import { createArenas } from "../game/arena";
 import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
 
@@ -9,7 +10,6 @@ export default function GameCanvas() {
   useEffect(() => {
     const canvas = canvasRef.current!;
 
-    // Canvas 크기를 뷰포트에 맞춤
     const resize = () => {
       canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -17,10 +17,11 @@ export default function GameCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    // 초기화 순서: input → players → gameLoop
+    // 초기화 순서: input → arenas → players → gameLoop
     const cleanupInput = initInput();
-    const players = createPlayers(canvas.width, canvas.height);
-    const cleanupLoop = startGameLoop(canvas, players);
+    const arenas  = createArenas(canvas.width, canvas.height);
+    const players = createPlayers(arenas);
+    const cleanupLoop = startGameLoop(canvas, players, arenas);
 
     return () => {
       window.removeEventListener("resize", resize);

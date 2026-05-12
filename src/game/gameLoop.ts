@@ -1,43 +1,44 @@
 import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
+import type { Arena } from "./arena";
+import { drawArena } from "./arena";
 import { updateWarnings, drawWarnings } from "./warning";
 
-const MAX_DT = 1 / 30; // 프레임 급락 시 dt를 최대 33ms로 제한 (튀는 이동 방지)
+const MAX_DT = 1 / 30;
 
 export function startGameLoop(
   canvas: HTMLCanvasElement,
-  players: [Player, Player]
+  players: [Player, Player],
+  arenas: [Arena, Arena],
 ): () => void {
   const ctx = canvas.getContext("2d")!;
   let rafId = 0;
   let lastTime = performance.now();
 
   function tick(now: number) {
-    // deltaTime 계산 (초 단위, 최대값 제한)
     const dt = Math.min((now - lastTime) / 1000, MAX_DT);
     lastTime = now;
 
-    const { width, height } = canvas;
-
-    // 배경 지우기
+    // 배경
     ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 경고 영역 업데이트 및 렌더링 (플레이어 아래 레이어)
+    // 아레나 테두리
+    for (const arena of arenas) drawArena(ctx, arena);
+
+    // 경고 영역
     updateWarnings(dt);
-    drawWarnings(ctx, width, height);
+    drawWarnings(ctx, arenas);
 
-    // 플레이어 업데이트 및 렌더링
-    for (const player of players) {
-      updatePlayer(player, dt, width, height);
-      drawPlayer(ctx, player);
-    }
+    // 플레이어 (각자 자신의 아레나 안에서 이동)
+    updatePlayer(players[0], dt, arenas[0]);
+    updatePlayer(players[1], dt, arenas[1]);
+    drawPlayer(ctx, players[0]);
+    drawPlayer(ctx, players[1]);
 
     rafId = requestAnimationFrame(tick);
   }
 
   rafId = requestAnimationFrame(tick);
-
-  // cleanup: 게임 루프 정지
   return () => cancelAnimationFrame(rafId);
 }
