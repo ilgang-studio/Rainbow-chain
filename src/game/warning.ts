@@ -35,10 +35,16 @@ export function getActiveChains(): Zone[] {
   return zones.filter(z => z.phase === "chain");
 }
 
-export function updateWarnings(dt: number, arenas: [Arena, Arena]): void {
+// 게임 시간에 따라 생성 주기를 단축 (최소 1.2초)
+function currentSpawnInterval(gameTime: number): number {
+  return Math.max(1.2, SPAWN_INTERVAL - gameTime * 0.05);
+}
+
+export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: number): void {
+  const interval = currentSpawnInterval(gameTime);
   for (let i = 0; i < 2; i++) {
     spawnTimers[i] += dt;
-    if (spawnTimers[i] < SPAWN_INTERVAL) continue;
+    if (spawnTimers[i] < interval) continue;
 
     spawnTimers[i] = 0;
     const arena = arenas[i];

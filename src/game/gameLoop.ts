@@ -7,6 +7,22 @@ import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./it
 
 const MAX_DT = 1 / 30;
 
+function drawTimer(ctx: CanvasRenderingContext2D, canvasWidth: number, gameTime: number): void {
+  const mins = Math.floor(gameTime / 60);
+  const secs = Math.floor(gameTime % 60);
+  const label = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+
+  ctx.save();
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "top";
+  ctx.font         = "bold 28px monospace";
+  ctx.fillStyle    = "#ffffff";
+  ctx.shadowColor  = "#ffffff";
+  ctx.shadowBlur   = 12;
+  ctx.fillText(label, canvasWidth / 2, 18);
+  ctx.restore();
+}
+
 // 체인 보유 중일 때 플레이어 주위에 표시하는 링
 function drawChainRing(ctx: CanvasRenderingContext2D, player: Player): void {
   const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 1000 * 4);
@@ -32,6 +48,7 @@ export function startGameLoop(
   let lastTime = performance.now();
   let isGameOver  = false;
   let deadIdx: 0 | 1 | null = null;
+  let gameTime = 0; // 경과 시간 (초) — 속도 증가 + 타이머 표시에 사용
 
   const items = createItems(arenas);
 
@@ -45,6 +62,7 @@ export function startGameLoop(
     resetItems(items, arenas);
     isGameOver = false;
     deadIdx    = null;
+    gameTime   = 0;
   }
 
   function checkCollisions(): void {
@@ -121,6 +139,8 @@ export function startGameLoop(
     for (const arena of arenas) drawArena(ctx, arena);
 
     if (!isGameOver) {
+      gameTime += dt;
+
       // ── 아이템 업데이트 ────────────────────
       updateItems(items, dt, arenas);
 
@@ -132,7 +152,7 @@ export function startGameLoop(
       }
 
       // ── 경고 / 사슬 업데이트 ───────────────
-      updateWarnings(dt, arenas);
+      updateWarnings(dt, arenas, gameTime);
 
       // ── 플레이어 이동 ──────────────────────
       updatePlayer(players[0], dt, arenas[0]);
@@ -150,6 +170,9 @@ export function startGameLoop(
       drawPlayer(ctx, players[i]);
       if (players[i].hasChain) drawChainRing(ctx, players[i]);
     }
+
+    // ── 타이머 (상단 중앙) ──────────────────
+    drawTimer(ctx, canvas.width, gameTime);
 
     // ── 게임 오버 오버레이 ───────────────────
     if (isGameOver) drawGameOver();
