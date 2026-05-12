@@ -1,123 +1,140 @@
-// 공간 봉쇄형 경고 시스템 (아레나 벽에서 밀려드는 형태)
+// 체인 경고 + 사슬 시스템
+// 경고는 "사슬이 지나갈 위치 예고"이며, 실제 위험 판정은 중앙선 기준
 
 import type { Arena } from "./arena";
 
-export type WallSide = "top" | "bottom" | "left" | "right";
-type Phase = "slide" | "flash" | "chain";
+export type Orientation = "horizontal" | "vertical";
+type Phase = "warning" | "flash" | "chain";
 
-interface Zone {
-  side: WallSide;
+export interface Zone {
+  orientation: Orientation;
+  centerPos: number;   // vertical → x좌표, horizontal → y좌표
   arenaIdx: 0 | 1;
   phase: Phase;
   elapsed: number;
 }
 
-const SLIDE_DURATION  = 1.6;
-const FLASH_DURATION  = 0.6;
-const CHAIN_DURATION  = 3.0;
-const SPAWN_INTERVAL  = 4.5;
-const THICKNESS_RATIO = 0.35; // 아레나 크기 대비 봉쇄 두께
+const WARNING_DURATION = 1.8;  // 경고 띠 표시 시간 (초)
+const FLASH_DURATION   = 0.5;  // 마지막 깜빡임 시간 (초)
+const CHAIN_DURATION   = 2.8;  // 사슬 유지 시간 (초)
+const SPAWN_INTERVAL   = 4.0;  // 경고 생성 주기 (초)
+const BAND_HALF_WIDTH  = 24;   // 경고 띠 반폭 (px)
 
-const SIDES: WallSide[] = ["top", "bottom", "left", "right"];
 const zones: Zone[] = [];
-// 두 아레나 독립적으로 타이머 관리 (약간 엇갈리게 시작)
-const spawnTimers: [number, number] = [
-  Math.random() * 2,
-  SPAWN_INTERVAL * 0.5 + Math.random() * 2,
-];
+// 두 아레나 타이머를 엇갈려 시작 (동시 등장 방지)
+const spawnTimers: [number, number] = [1.2, SPAWN_INTERVAL * 0.5 + 0.9];
 
-function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
+export function resetWarnings(): void {
+  zones.length = 0;
+  spawnTimers[0] = 1.2;
+  spawnTimers[1] = SPAWN_INTERVAL * 0.5 + 0.9;
 }
 
-export function updateWarnings(dt: number): void {
+// 충돌 판정용: chain 단계 Zone만 반환
+export function getActiveChains(): Zone[] {
+  return zones.filter(z => z.phase === "chain");
+}
+
+export function updateWarnings(dt: number, arenas: [Arena, Arena]): void {
   for (let i = 0; i < 2; i++) {
     spawnTimers[i] += dt;
-    if (spawnTimers[i] >= SPAWN_INTERVAL) {
-      spawnTimers[i] = 0;
-      const side = SIDES[Math.floor(Math.random() * SIDES.length)];
-      zones.push({ side, arenaIdx: i as 0 | 1, phase: "slide", elapsed: 0 });
-    }
+    if (spawnTimers[i] < SPAWN_INTERVAL) continue;
+
+    spawnTimers[i] = 0;
+    const arena = arenas[i];
+    const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
+    // 아레나 가장자리 15% 여백 안쪽 랜덤 위치
+    const pad = Math.min(arena.w, arena.h) * 0.15;
+    const centerPos = orientation === "vertical"
+      ? arena.x + pad + Math.random() * (arena.w - pad * 2)
+      : arena.y + pad + Math.random() * (arena.h - pad * 2);
+
+    zones.push({ orientation, centerPos, arenaIdx: i as 0 | 1, phase: "warning", elapsed: 0 });
   }
 
   for (let i = zones.length - 1; i >= 0; i--) {
     const z = zones[i];
     z.elapsed += dt;
-    if (z.phase === "slide" && z.elapsed >= SLIDE_DURATION) {
-      z.phase = "flash"; z.elapsed = 0;
-    } else if (z.phase === "flash" && z.elapsed >= FLASH_DURATION) {
-      z.phase = "chain"; z.elapsed = 0;
-    } else if (z.phase === "chain" && z.elapsed >= CHAIN_DURATION) {
-      zones.splice(i, 1);
-    }
+    if      (z.phase === "warning" && z.elapsed >= WARNING_DURATION) { z.phase = "flash"; z.elapsed = 0; }
+    else if (z.phase === "flash"   && z.elapsed >= FLASH_DURATION)   { z.phase = "chain"; z.elapsed = 0; }
+    else if (z.phase === "chain"   && z.elapsed >= CHAIN_DURATION)   { zones.splice(i, 1); }
   }
 }
 
-function getCurrentThick(z: Zone, arena: Arena): number {
-  const max = Math.min(arena.w, arena.h) * THICKNESS_RATIO;
-  if (z.phase === "slide") return max * easeOut(z.elapsed / SLIDE_DURATION);
-  return max;
-}
-
-// 경고 직사각형 [x, y, w, h] — 아레나 좌표 기준
-function zoneRect(side: WallSide, a: Arena, thick: number): [number, number, number, number] {
-  switch (side) {
-    case "top":    return [a.x,             a.y,             a.w,   thick];
-    case "bottom": return [a.x,             a.y + a.h - thick, a.w, thick];
-    case "left":   return [a.x,             a.y,             thick,  a.h];
-    case "right":  return [a.x + a.w - thick, a.y,           thick,  a.h];
+// 경고 띠 직사각형 [x, y, w, h]
+function bandRect(z: Zone, arena: Arena): [number, number, number, number] {
+  if (z.orientation === "vertical") {
+    return [z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h];
   }
+  return [arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2];
 }
 
-// safe zone과의 내부 경계선 (사슬 생성 위치)
-function innerEdge(side: WallSide, a: Arena, thick: number) {
-  switch (side) {
-    case "top":    return { x1: a.x,             y1: a.y + thick,       x2: a.x + a.w,           y2: a.y + thick       };
-    case "bottom": return { x1: a.x,             y1: a.y + a.h - thick, x2: a.x + a.w,           y2: a.y + a.h - thick };
-    case "left":   return { x1: a.x + thick,     y1: a.y,               x2: a.x + thick,          y2: a.y + a.h         };
-    case "right":  return { x1: a.x + a.w - thick, y1: a.y,             x2: a.x + a.w - thick,    y2: a.y + a.h         };
+// 반투명 띠 + 중앙선 그리기 (warning / flash 단계 공용)
+function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
+  const [rx, ry, rw, rh] = bandRect(z, arena);
+
+  // 반투명 빨간 띠
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.28;
+  ctx.fillStyle = "#cc0000";
+  ctx.fillRect(rx, ry, rw, rh);
+  ctx.restore();
+
+  // 중앙선 (더 진하게 — "실제 위험 위치" 표시)
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.88;
+  ctx.strokeStyle = "#ff4422";
+  ctx.lineWidth = 2;
+  ctx.shadowColor = "#ff2200";
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  if (z.orientation === "vertical") {
+    ctx.moveTo(z.centerPos, arena.y);
+    ctx.lineTo(z.centerPos, arena.y + arena.h);
+  } else {
+    ctx.moveTo(arena.x, z.centerPos);
+    ctx.lineTo(arena.x + arena.w, z.centerPos);
   }
+  ctx.stroke();
+  ctx.restore();
 }
 
-function drawChainLinks(
-  ctx: CanvasRenderingContext2D,
-  side: WallSide,
-  arena: Arena,
-  thick: number,
-  alpha: number,
-): void {
-  const edge = innerEdge(side, arena, thick);
-  const isHoriz = side === "top" || side === "bottom";
-  const lineLen = isHoriz ? arena.w : arena.h;
+// 사슬 링크 그리기 (chain 단계)
+function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
+  const isVert  = z.orientation === "vertical";
+  const lineLen = isVert ? arena.h : arena.w;
+  const base    = isVert ? arena.y : arena.x;
 
-  const linkR   = 5;
-  const spacing = 20;
+  const linkR   = 4;
+  const spacing = 16;
   const count   = Math.floor(lineLen / spacing);
-  const startPos = (lineLen - count * spacing) / 2 + spacing / 2;
+  const startPos = base + (lineLen - count * spacing) / 2 + spacing / 2;
 
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = "#ff6020";
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2;
   ctx.shadowColor = "#ff4000";
-  ctx.shadowBlur = 18;
+  ctx.shadowBlur = 14;
 
   for (let i = 0; i < count; i++) {
     const pos = startPos + i * spacing;
-    const cx = isHoriz ? edge.x1 + pos : edge.x1;
-    const cy = isHoriz ? edge.y1       : edge.y1 + pos;
+    const cx = isVert ? z.centerPos : pos;
+    const cy = isVert ? pos : z.centerPos;
 
+    // 링크 원
     ctx.beginPath();
     ctx.arc(cx, cy, linkR, 0, Math.PI * 2);
     ctx.stroke();
 
+    // 연결선
     if (i < count - 1) {
       const npos = startPos + (i + 1) * spacing;
-      const nx = isHoriz ? edge.x1 + npos : edge.x1;
-      const ny = isHoriz ? edge.y1        : edge.y1 + npos;
+      const nx = isVert ? z.centerPos : npos;
+      const ny = isVert ? npos : z.centerPos;
       ctx.beginPath();
-      ctx.moveTo(isHoriz ? cx + linkR : cx, isHoriz ? cy : cy + linkR);
-      ctx.lineTo(isHoriz ? nx - linkR : nx, isHoriz ? ny : ny - linkR);
+      ctx.moveTo(isVert ? cx : cx + linkR, isVert ? cy + linkR : cy);
+      ctx.lineTo(isVert ? nx : nx - linkR, isVert ? ny - linkR : ny);
       ctx.stroke();
     }
   }
@@ -127,83 +144,34 @@ function drawChainLinks(
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
   for (const z of zones) {
     const arena = arenas[z.arenaIdx];
-    const thick = getCurrentThick(z, arena);
-    const [rx, ry, rw, rh] = zoneRect(z.side, arena, thick);
-    const edge = innerEdge(z.side, arena, thick);
 
-    // 아레나 경계 안으로 클리핑 (shadowBlur 넘침 방지)
+    // 아레나 경계 밖으로 넘치지 않도록 클리핑
     ctx.save();
     ctx.beginPath();
     ctx.rect(arena.x, arena.y, arena.w, arena.h);
     ctx.clip();
 
-    if (z.phase === "slide") {
-      const t = easeOut(z.elapsed / SLIDE_DURATION);
-
-      // 봉쇄 영역 진한 채움
-      ctx.save();
-      ctx.globalAlpha = t * 0.45;
-      ctx.fillStyle = "#cc0808";
-      ctx.shadowColor = "#ff0000";
-      ctx.shadowBlur = 24;
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.restore();
-
-      // 내부 경계 네온 라인
-      ctx.save();
-      ctx.globalAlpha = t * 0.95;
-      ctx.strokeStyle = "#ff4422";
-      ctx.lineWidth = 4;
-      ctx.shadowColor = "#ff2200";
-      ctx.shadowBlur = 28;
-      ctx.beginPath();
-      ctx.moveTo(edge.x1, edge.y1);
-      ctx.lineTo(edge.x2, edge.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      if (t > 0.5) {
-        drawChainLinks(ctx, z.side, arena, thick, (t - 0.5) * 2 * 0.5);
-      }
+    if (z.phase === "warning") {
+      drawBand(ctx, z, arena, z.elapsed / WARNING_DURATION);
 
     } else if (z.phase === "flash") {
-      const fp    = z.elapsed / FLASH_DURATION;
-      const pulse = 0.5 + 0.5 * Math.sin(fp * Math.PI * 10);
-
-      ctx.save();
-      ctx.globalAlpha = pulse * 0.55;
-      ctx.fillStyle = "#ee0a0a";
-      ctx.shadowColor = "#ff0000";
-      ctx.shadowBlur = 40;
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalAlpha = pulse;
-      ctx.strokeStyle = "#ff5533";
-      ctx.lineWidth = 5;
-      ctx.shadowColor = "#ff2200";
-      ctx.shadowBlur = 36;
-      ctx.beginPath();
-      ctx.moveTo(edge.x1, edge.y1);
-      ctx.lineTo(edge.x2, edge.y2);
-      ctx.stroke();
-      ctx.restore();
-
-      drawChainLinks(ctx, z.side, arena, thick, pulse * 0.8);
+      const pulse = 0.5 + 0.5 * Math.sin((z.elapsed / FLASH_DURATION) * Math.PI * 10);
+      drawBand(ctx, z, arena, pulse);
+      drawChainLinks(ctx, z, arena, pulse * 0.55);
 
     } else { // chain
-      const fadeOut = z.elapsed > CHAIN_DURATION * 0.7
-        ? 1 - (z.elapsed - CHAIN_DURATION * 0.7) / (CHAIN_DURATION * 0.3)
-        : 1.0;
+      const progress = z.elapsed / CHAIN_DURATION;
+      const fade = progress > 0.8 ? 1 - (progress - 0.8) / 0.2 : 1.0;
 
+      // 잔여 띠 (매우 연하게)
+      const [rx, ry, rw, rh] = bandRect(z, arena);
       ctx.save();
-      ctx.globalAlpha = fadeOut * 0.35;
+      ctx.globalAlpha = fade * 0.10;
       ctx.fillStyle = "#770000";
       ctx.fillRect(rx, ry, rw, rh);
       ctx.restore();
 
-      drawChainLinks(ctx, z.side, arena, thick, fadeOut);
+      drawChainLinks(ctx, z, arena, fade);
     }
 
     ctx.restore(); // clip 해제
