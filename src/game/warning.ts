@@ -3,26 +3,54 @@ import type { Arena } from "./arena";
 export type Orientation = "horizontal" | "vertical";
 type Phase = "warning" | "flash" | "extending" | "active" | "exiting";
 
+// ── 체인 타입 설정 ─────────────────────────────────────────────────────────────
+// 새 체인 타입 추가 시 여기에만 항목을 추가하면 됩니다.
+export interface ChainConfig {
+  extendDuration: number;  // 뻗는 데 걸리는 시간 (초)
+  activeDuration: number;  // 완전히 뻗은 뒤 유지 시간 (초)
+  exitDuration:   number;  // 아레나 밖으로 나가는 시간 (초)
+  warningColor:   string;  // 경고 띠/중앙선 색상
+  linkColor:      string;  // 체인 링크 + glow 색상
+}
+
+export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
+  normal: {
+    extendDuration: 0.45,
+    activeDuration: 1.8,
+    exitDuration:   0.45,
+    warningColor:   "#999999",
+    linkColor:      "#c8c8c8",
+  },
+  rush: {
+    extendDuration: 0.22,   // normal 대비 2배 빠름
+    activeDuration: 0.7,    // 짧은 유지 시간
+    exitDuration:   0.22,
+    warningColor:   "#ff2200",
+    linkColor:      "#ff5533",
+  },
+};
+
+// 아이템 획득 시 랜덤 지급에 사용
+export const CHAIN_TYPE_IDS = Object.keys(CHAIN_CONFIGS);
+
 export interface Zone {
   orientation: Orientation;
   centerPos:   number;
   arenaIdx:    0 | 1;
   phase:       Phase;
   elapsed:     number;
-  direction:   1 | -1;   // 1: top/left→bottom/right, -1: 반대
-  drawLength:  number;   // extending 단계: 현재 뻗은 길이
-  exitOffset:  number;   // exiting 단계: 진행 방향으로 이동한 거리
+  direction:   1 | -1;
+  drawLength:  number;
+  exitOffset:  number;
+  chainType:   string;  // CHAIN_CONFIGS 키 ("normal" | "rush" | ...)
 }
 
 const WARNING_DURATION    = 1.8;
 const FLASH_DURATION      = 0.5;
-const EXTEND_DURATION     = 0.45;  // 한쪽 벽 → 반대 벽까지 뻗는 시간
-const ACTIVE_DURATION     = 1.8;   // 완전히 뻗은 뒤 유지 시간
-const EXIT_DURATION       = 0.45;  // 아레나 밖으로 날아가는 시간 (같은 속도)
 const SPAWN_INTERVAL      = 4.0;
 const BAND_HALF_WIDTH     = 24;
 const MAX_ZONES_PER_ARENA = 6;
-const LINK_R              = 3;   // 링크 원 반지름 — 렌더/업데이트/충돌 공통
+const LINK_R              = 3;
 
 const zones: Zone[] = [];
 const spawnTimers: [number, number] = [1.2, SPAWN_INTERVAL * 0.5 + 0.9];
@@ -55,7 +83,7 @@ function spawnCount(gameTime: number): number {
   return 1;
 }
 
-function spawnZone(arenaIdx: 0 | 1, arena: Arena): void {
+function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
   const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
   const centerPos = orientation === "vertical"
@@ -66,6 +94,7 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena): void {
     orientation, centerPos, arenaIdx,
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
+    chainType,
   });
 }
 
@@ -96,39 +125,43 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       if (z.elapsed >= FLASH_DURATION) { z.phase = "extending"; z.elapsed = 0; z.drawLength = 0; }
 
     } else if (z.phase === "extending") {
-      const arena       = arenas[z.arenaIdx];
-      const fullLen     = z.orientation === "vertical" ? arena.h : arena.w;
-      const adjFullLen  = fullLen - 2 * LINK_R;
-      z.drawLength      = Math.min(adjFullLen, adjFullLen * (z.elapsed / EXTEND_DURATION));
-      if (z.elapsed >= EXTEND_DURATION) {
+      const cfg        = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+      const arena      = arenas[z.arenaIdx];
+      const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
+      const adjFullLen = fullLen - 2 * LINK_R;
+      z.drawLength     = Math.min(adjFullLen, adjFullLen * (z.elapsed / cfg.extendDuration));
+      if (z.elapsed >= cfg.extendDuration) {
         z.phase = "active"; z.elapsed = 0; z.drawLength = adjFullLen;
       }
 
     } else if (z.phase === "active") {
-      if (z.elapsed >= ACTIVE_DURATION) { z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0; }
+      const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+      if (z.elapsed >= cfg.activeDuration) { z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0; }
 
     } else { // exiting
+      const cfg        = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
       const arena      = arenas[z.arenaIdx];
       const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
       const adjFullLen = fullLen - 2 * LINK_R;
-      z.exitOffset     = adjFullLen * (z.elapsed / EXIT_DURATION);
+      z.exitOffset     = adjFullLen * (z.elapsed / cfg.exitDuration);
       if (z.exitOffset >= adjFullLen) zones.splice(i, 1);
     }
   }
 }
 
-export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena]): void {
-  spawnZone(arenaIdx, arenas[arenaIdx]);
+export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena], chainType: string): void {
+  spawnZone(arenaIdx, arenas[arenaIdx], chainType);
 }
 
 // ── 내부 렌더 헬퍼 ───────────────────────────────────────────────────────────
 
-// 경고 띠 + 중앙선 — 회색 (warning / flash 단계)
+// 경고 띠 + 중앙선 (warning / flash 단계) — 색상은 체인 타입별 config
 function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
+  const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
   const isVert = z.orientation === "vertical";
 
   ctx.globalAlpha = alpha * 0.22;
-  ctx.fillStyle   = "#888888";
+  ctx.fillStyle   = cfg.warningColor;
   if (isVert) {
     ctx.fillRect(z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
   } else {
@@ -136,7 +169,7 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
   }
 
   ctx.globalAlpha = alpha * 0.80;
-  ctx.strokeStyle = "#aaaaaa";
+  ctx.strokeStyle = cfg.warningColor;
   ctx.lineWidth   = 2;
   ctx.beginPath();
   if (isVert) {
@@ -176,9 +209,11 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
 
   const STEP = 13;  // 링크 중심 간격 (line = STEP - LINK_R*2 = 7px)
 
+  const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+
   // glow pass — 체인 경로를 굵은 반투명 선으로 1회만 그림 (shadowBlur 없음)
   ctx.globalAlpha = 0.18;
-  ctx.strokeStyle = "#c8c8c8";
+  ctx.strokeStyle = cfg.linkColor;
   ctx.lineWidth   = LINK_R * 4;
   ctx.lineCap     = "round";
   ctx.beginPath();
@@ -193,7 +228,7 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
 
   // main pass — 실제 고리 선명하게 렌더링
   ctx.globalAlpha = 1.0;
-  ctx.strokeStyle = "#c8c8c8";
+  ctx.strokeStyle = cfg.linkColor;
   ctx.lineWidth   = 1.5;
   ctx.lineCap     = "butt";
 

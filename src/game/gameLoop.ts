@@ -2,7 +2,7 @@ import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
-import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain } from "./warning";
+import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS } from "./warning";
 import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
 
@@ -29,9 +29,10 @@ export function startGameLoop(
 
   function resetGame(): void {
     for (let i = 0; i < 2; i++) {
-      players[i].x = arenas[i].x + arenas[i].w / 2;
-      players[i].y = arenas[i].y + arenas[i].h / 2;
-      players[i].hasChain = false;
+      players[i].x         = arenas[i].x + arenas[i].w / 2;
+      players[i].y         = arenas[i].y + arenas[i].h / 2;
+      players[i].hasChain  = false;
+      players[i].chainType = "normal";
     }
     resetWarnings();
     resetItems(items, arenas);
@@ -97,7 +98,7 @@ export function startGameLoop(
     for (let i = 0; i < 2; i++) {
       if (e.key === players[i].useKey && players[i].hasChain) {
         players[i].hasChain = false;
-        fireChain((1 - i) as 0 | 1, arenas);  // 상대 아레나에 발동
+        fireChain((1 - i) as 0 | 1, arenas, players[i].chainType);  // 상대 아레나에 발동
       }
     }
   };
@@ -133,7 +134,8 @@ export function startGameLoop(
       // ── 아이템 획득 판정 ───────────────────
       for (let i = 0; i < 2; i++) {
         if (!players[i].hasChain && tryPickup(items[i], players[i])) {
-          players[i].hasChain = true;
+          players[i].hasChain  = true;
+          players[i].chainType = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
         }
       }
 

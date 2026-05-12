@@ -1,5 +1,6 @@
 // HUD 렌더링 — FPS, 타이머, 게임오버 오버레이, 체인 보유 링
 import type { Player } from "./player";
+import { CHAIN_CONFIGS } from "./warning";
 
 export function drawFPS(ctx: CanvasRenderingContext2D, fps: number): void {
   ctx.save();
@@ -60,12 +61,13 @@ export function drawGameOver(
   ctx.restore();
 }
 
-// 체인 보유 중 플레이어 주위 표시 링
+// 체인 보유 중 플레이어 주위 표시 링 — 보유 체인 타입 색상 반영
 export function drawChainRing(ctx: CanvasRenderingContext2D, player: Player): void {
+  const color = (CHAIN_CONFIGS[player.chainType] ?? CHAIN_CONFIGS["normal"]).linkColor;
   const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 1000 * 4);
   ctx.save();
-  ctx.strokeStyle = "#00ffcc";
-  ctx.shadowColor = "#00ffcc";
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
   ctx.shadowBlur  = 14 * pulse;
   ctx.lineWidth   = 2;
   ctx.globalAlpha = 0.75 * pulse;
