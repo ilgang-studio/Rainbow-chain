@@ -42,15 +42,26 @@ export function startGameLoop(
 
   function checkCollisions(): void {
     for (const chain of getActiveChains()) {
-      const p = players[chain.arenaIdx];
+      const p     = players[chain.arenaIdx];
+      const arena = arenas[chain.arenaIdx];
+
+      // 체인 중심선 거리 판정
       const dist = chain.orientation === "vertical"
         ? Math.abs(p.x - chain.centerPos)
         : Math.abs(p.y - chain.centerPos);
-      if (dist < p.radius) {
-        isGameOver = true;
-        deadIdx    = chain.arenaIdx;
-        return;
-      }
+      if (dist >= p.radius) continue;
+
+      // 실제로 뻗어나간 구간에만 판정
+      const fullLen  = chain.orientation === "vertical" ? arena.h : arena.w;
+      const base     = chain.orientation === "vertical" ? arena.y : arena.x;
+      const segStart = chain.direction === 1 ? base : base + fullLen - chain.drawLength;
+      const segEnd   = segStart + chain.drawLength;
+      const along    = chain.orientation === "vertical" ? p.y : p.x;
+      if (along + p.radius < segStart || along - p.radius > segEnd) continue;
+
+      isGameOver = true;
+      deadIdx    = chain.arenaIdx;
+      return;
     }
   }
 
