@@ -7,6 +7,17 @@ import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./it
 
 const MAX_DT = 1 / 30;
 
+function drawFPS(ctx: CanvasRenderingContext2D, fps: number): void {
+  ctx.save();
+  ctx.textAlign    = "left";
+  ctx.textBaseline = "top";
+  ctx.font         = "14px monospace";
+  // FPS에 따라 색상 변화: 60↑ 초록, 40↑ 노랑, 그 미만 빨강
+  ctx.fillStyle = fps >= 60 ? "#00ff88" : fps >= 40 ? "#ffcc00" : "#ff4444";
+  ctx.fillText(`FPS: ${fps}`, 12, 12);
+  ctx.restore();
+}
+
 function drawTimer(ctx: CanvasRenderingContext2D, canvasWidth: number, gameTime: number): void {
   const mins = Math.floor(gameTime / 60);
   const secs = Math.floor(gameTime % 60);
@@ -48,7 +59,12 @@ export function startGameLoop(
   let lastTime = performance.now();
   let isGameOver  = false;
   let deadIdx: 0 | 1 | null = null;
-  let gameTime = 0; // 경과 시간 (초) — 속도 증가 + 타이머 표시에 사용
+  let gameTime = 0;
+
+  // FPS 계산: 1초 단위 샘플링
+  let fpsDisplay  = 0;
+  let fpsFrames   = 0;
+  let fpsAccum    = 0;
 
   const items = createItems(arenas);
 
@@ -128,8 +144,18 @@ export function startGameLoop(
   window.addEventListener("keydown", onKey);
 
   function tick(now: number) {
-    const dt = Math.min((now - lastTime) / 1000, MAX_DT);
-    lastTime = now;
+    const raw = (now - lastTime) / 1000;
+    const dt  = Math.min(raw, MAX_DT);
+    lastTime  = now;
+
+    // FPS: 1초마다 갱신
+    fpsFrames++;
+    fpsAccum += raw;
+    if (fpsAccum >= 1.0) {
+      fpsDisplay = Math.round(fpsFrames / fpsAccum);
+      fpsFrames  = 0;
+      fpsAccum   = 0;
+    }
 
     // ── 배경 ────────────────────────────────
     ctx.fillStyle = "#000000";
@@ -171,8 +197,9 @@ export function startGameLoop(
       if (players[i].hasChain) drawChainRing(ctx, players[i]);
     }
 
-    // ── 타이머 (상단 중앙) ──────────────────
+    // ── 타이머 + FPS ────────────────────────
     drawTimer(ctx, canvas.width, gameTime);
+    drawFPS(ctx, fpsDisplay);
 
     // ── 게임 오버 오버레이 ───────────────────
     if (isGameOver) drawGameOver();
