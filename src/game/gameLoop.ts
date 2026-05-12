@@ -4,50 +4,9 @@ import type { Arena } from "./arena";
 import { drawArena } from "./arena";
 import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain } from "./warning";
 import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
+import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
 
 const MAX_DT = 1 / 30;
-
-function drawFPS(ctx: CanvasRenderingContext2D, fps: number): void {
-  ctx.save();
-  ctx.textAlign    = "left";
-  ctx.textBaseline = "top";
-  ctx.font         = "14px monospace";
-  // FPS에 따라 색상 변화: 60↑ 초록, 40↑ 노랑, 그 미만 빨강
-  ctx.fillStyle = fps >= 60 ? "#00ff88" : fps >= 40 ? "#ffcc00" : "#ff4444";
-  ctx.fillText(`FPS: ${fps}`, 12, 12);
-  ctx.restore();
-}
-
-function drawTimer(ctx: CanvasRenderingContext2D, canvasWidth: number, gameTime: number): void {
-  const mins = Math.floor(gameTime / 60);
-  const secs = Math.floor(gameTime % 60);
-  const label = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-
-  ctx.save();
-  ctx.textAlign    = "center";
-  ctx.textBaseline = "top";
-  ctx.font         = "bold 28px monospace";
-  ctx.fillStyle    = "#ffffff";
-  ctx.shadowColor  = "#ffffff";
-  ctx.shadowBlur   = 12;
-  ctx.fillText(label, canvasWidth / 2, 18);
-  ctx.restore();
-}
-
-// 체인 보유 중일 때 플레이어 주위에 표시하는 링
-function drawChainRing(ctx: CanvasRenderingContext2D, player: Player): void {
-  const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 1000 * 4);
-  ctx.save();
-  ctx.strokeStyle = "#00ffcc";
-  ctx.shadowColor = "#00ffcc";
-  ctx.shadowBlur  = 14 * pulse;
-  ctx.lineWidth   = 2;
-  ctx.globalAlpha = 0.75 * pulse;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.radius + 8, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
 
 export function startGameLoop(
   canvas: HTMLCanvasElement,
@@ -93,36 +52,6 @@ export function startGameLoop(
         return;
       }
     }
-  }
-
-  function drawGameOver(): void {
-    ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.78)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.textAlign    = "center";
-    ctx.textBaseline = "middle";
-    const cx = canvas.width  / 2;
-    const cy = canvas.height / 2;
-
-    ctx.fillStyle   = "#ffffff";
-    ctx.shadowColor = "#ffffff";
-    ctx.shadowBlur  = 28;
-    ctx.font = "bold 72px monospace";
-    ctx.fillText("GAME OVER", cx, cy - 52);
-
-    ctx.shadowBlur = 12;
-    ctx.font = "28px monospace";
-    ctx.fillText(
-      deadIdx === 0 ? "PLAYER 1  DEFEATED" : "PLAYER 2  DEFEATED",
-      cx, cy + 14,
-    );
-
-    ctx.shadowBlur = 0;
-    ctx.fillStyle  = "#666666";
-    ctx.font = "18px monospace";
-    ctx.fillText("Press  R  to restart", cx, cy + 66);
-    ctx.restore();
   }
 
   const onKey = (e: KeyboardEvent) => {
@@ -202,7 +131,7 @@ export function startGameLoop(
     drawFPS(ctx, fpsDisplay);
 
     // ── 게임 오버 오버레이 ───────────────────
-    if (isGameOver) drawGameOver();
+    if (isGameOver) drawGameOver(ctx, canvas.width, canvas.height, deadIdx!);
 
     rafId = requestAnimationFrame(tick);
   }

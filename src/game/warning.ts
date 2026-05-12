@@ -1,6 +1,3 @@
-// 체인 경고 + 사슬 시스템 (성능 최적화)
-// shadowBlur 제거, 링크 경로 일괄 stroke, save/restore 최소화
-
 import type { Arena } from "./arena";
 
 export type Orientation = "horizontal" | "vertical";
@@ -14,16 +11,16 @@ export interface Zone {
   elapsed: number;
 }
 
-const WARNING_DURATION = 1.8;
-const FLASH_DURATION   = 0.5;
-const CHAIN_DURATION   = 2.8;
-const SPAWN_INTERVAL   = 4.0;
-const BAND_HALF_WIDTH  = 24;
+const WARNING_DURATION   = 1.8;
+const FLASH_DURATION     = 0.5;
+const CHAIN_DURATION     = 2.8;
+const SPAWN_INTERVAL     = 4.0;
+const BAND_HALF_WIDTH    = 24;
+const MAX_ZONES_PER_ARENA = 6;   // 동시 존 상한 — 후반 과부하 방지
 
 const zones: Zone[] = [];
 const spawnTimers: [number, number] = [1.2, SPAWN_INTERVAL * 0.5 + 0.9];
 
-// filter() 대신 재사용 버퍼로 매 프레임 배열 할당 제거
 const _chainBuf: Zone[] = [];
 export function getActiveChains(): Zone[] {
   _chainBuf.length = 0;
@@ -40,22 +37,39 @@ export function resetWarnings(): void {
 }
 
 function currentSpawnInterval(gameTime: number): number {
-  return Math.max(1.2, SPAWN_INTERVAL - gameTime * 0.05);
+  return Math.max(0.8, SPAWN_INTERVAL - gameTime * 0.06);
+}
+
+function spawnCount(gameTime: number): number {
+  if (gameTime >= 90) return 3;
+  if (gameTime >= 45) return 2;
+  return 1;
+}
+
+function spawnZone(arenaIdx: 0 | 1, arena: Arena): void {
+  const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
+  const pad = Math.min(arena.w, arena.h) * 0.15;
+  const centerPos = orientation === "vertical"
+    ? arena.x + pad + Math.random() * (arena.w - pad * 2)
+    : arena.y + pad + Math.random() * (arena.h - pad * 2);
+  zones.push({ orientation, centerPos, arenaIdx, phase: "warning", elapsed: 0 });
 }
 
 export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: number): void {
   const interval = currentSpawnInterval(gameTime);
+  const count    = spawnCount(gameTime);
   for (let i = 0; i < 2; i++) {
     spawnTimers[i] += dt;
     if (spawnTimers[i] < interval) continue;
     spawnTimers[i] = 0;
-    const arena = arenas[i];
-    const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
-    const pad = Math.min(arena.w, arena.h) * 0.15;
-    const centerPos = orientation === "vertical"
-      ? arena.x + pad + Math.random() * (arena.w - pad * 2)
-      : arena.y + pad + Math.random() * (arena.h - pad * 2);
-    zones.push({ orientation, centerPos, arenaIdx: i as 0 | 1, phase: "warning", elapsed: 0 });
+
+    // 아레나별 현재 존 수 확인 (cap 초과 시 스킵)
+    let existing = 0;
+    for (let j = 0; j < zones.length; j++) {
+      if (zones[j].arenaIdx === i) existing++;
+    }
+    const toSpawn = Math.min(count, MAX_ZONES_PER_ARENA - existing);
+    for (let n = 0; n < toSpawn; n++) spawnZone(i as 0 | 1, arenas[i]);
   }
 
   for (let i = zones.length - 1; i >= 0; i--) {
@@ -68,22 +82,15 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
 }
 
 export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena]): void {
-  const arena = arenas[arenaIdx];
-  const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
-  const pad = Math.min(arena.w, arena.h) * 0.15;
-  const centerPos = orientation === "vertical"
-    ? arena.x + pad + Math.random() * (arena.w - pad * 2)
-    : arena.y + pad + Math.random() * (arena.h - pad * 2);
-  zones.push({ orientation, centerPos, arenaIdx, phase: "warning", elapsed: 0 });
+  spawnZone(arenaIdx, arenas[arenaIdx]);
 }
 
-// ── 내부 렌더 헬퍼 ────────────────────────────────────────────────────────────
+// ── 내부 렌더 헬퍼 ───────────────────────────────────────────────────────────
 
-// 경고 띠 + 중앙선 (shadowBlur 없음, save/restore 없음 — 호출부에서 관리)
+// 경고 띠 + 중앙선 (warning / flash 단계 전용, shadowBlur 없음)
 function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
   const isVert = z.orientation === "vertical";
 
-  // 반투명 빨간 띠
   ctx.globalAlpha = alpha * 0.28;
   ctx.fillStyle   = "#cc0000";
   if (isVert) {
@@ -92,10 +99,9 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
     ctx.fillRect(arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
   }
 
-  // 중앙선 (더 밝은 색으로 위험 위치 표시 — glow 대신 색상으로 대체)
-  ctx.globalAlpha  = alpha * 0.88;
-  ctx.strokeStyle  = "#ff5533";
-  ctx.lineWidth    = 2;
+  ctx.globalAlpha = alpha * 0.88;
+  ctx.strokeStyle = "#ff5533";
+  ctx.lineWidth   = 2;
   ctx.beginPath();
   if (isVert) {
     ctx.moveTo(z.centerPos, arena.y);
@@ -107,53 +113,40 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
   ctx.stroke();
 }
 
-// 사슬 링크 — 모든 호 + 연결선을 단일 beginPath → stroke() 로 처리
-// (링크당 stroke 호출 제거: ~60 draw call → 1 draw call per chain)
+// 체인 링크 — rect 기반 단일 fill() (arc 제거, stroke 제거)
+// 회색 세그먼트를 일괄 ctx.fill() 1회로 처리
 function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
   const isVert  = z.orientation === "vertical";
   const lineLen = isVert ? arena.h : arena.w;
   const base    = isVert ? arena.y : arena.x;
 
-  const linkR   = 4;
-  const spacing = 16;
-  const count   = Math.floor(lineLen / spacing);
-  const start   = base + (lineLen - count * spacing) / 2 + spacing / 2;
+  const SEG  = 9;   // 채워진 구간 길이
+  const GAP  = 5;   // 빈 구간 길이
+  const STEP = SEG + GAP;
+  const HW   = 2;   // 링크 절반 굵기
+  const count = Math.ceil(lineLen / STEP) + 1;
 
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = "#ff6633";
-  ctx.lineWidth   = 2;
+  ctx.fillStyle   = "#aaaaaa";
 
-  // 링크 원 + 연결선을 하나의 경로로 일괄 처리
   ctx.beginPath();
   for (let i = 0; i < count; i++) {
-    const pos = start + i * spacing;
-    const cx = isVert ? z.centerPos : pos;
-    const cy = isVert ? pos : z.centerPos;
-
-    // moveTo로 이전 점과의 자동 연결 방지
-    ctx.moveTo(cx + linkR, cy);
-    ctx.arc(cx, cy, linkR, 0, Math.PI * 2);
-
-    if (i < count - 1) {
-      const npos = start + (i + 1) * spacing;
-      const nx = isVert ? z.centerPos : npos;
-      const ny = isVert ? npos : z.centerPos;
-      ctx.moveTo(isVert ? cx         : cx + linkR, isVert ? cy + linkR : cy);
-      ctx.lineTo(isVert ? nx         : nx - linkR, isVert ? ny - linkR : ny);
+    const pos = base + i * STEP;
+    if (isVert) {
+      ctx.rect(z.centerPos - HW, pos, HW * 2, SEG);
+    } else {
+      ctx.rect(pos, z.centerPos - HW, SEG, HW * 2);
     }
   }
-  ctx.stroke(); // 전체 체인 단 1회 stroke
+  ctx.fill();  // 체인 전체 단 1회 fill
 }
 
-// ── 메인 렌더 ─────────────────────────────────────────────────────────────────
+// ── 메인 렌더 ────────────────────────────────────────────────────────────────
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
-  // shadowBlur가 외부에서 설정된 경우 초기화
   ctx.shadowBlur = 0;
 
   for (const z of zones) {
     const arena = arenas[z.arenaIdx];
-
-    // 존당 save/restore 1회 (clip 제거: 15% 패딩으로 아레나 경계 자동 보장)
     ctx.save();
 
     if (z.phase === "warning") {
@@ -164,23 +157,12 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       drawBand(ctx, z, arena, pulse);
       drawChainLinks(ctx, z, arena, pulse * 0.55);
 
-    } else { // chain
+    } else { // chain — 띠 없음, 회색 링크만
       const progress = z.elapsed / CHAIN_DURATION;
       const fade = progress > 0.8 ? 1 - (progress - 0.8) / 0.2 : 1.0;
-
-      // 잔여 띠 (매우 연하게)
-      const isVert = z.orientation === "vertical";
-      ctx.globalAlpha = fade * 0.10;
-      ctx.fillStyle   = "#770000";
-      if (isVert) {
-        ctx.fillRect(z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
-      } else {
-        ctx.fillRect(arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
-      }
-
       drawChainLinks(ctx, z, arena, fade);
     }
 
-    ctx.restore(); // globalAlpha 자동 복원
+    ctx.restore();
   }
 }
