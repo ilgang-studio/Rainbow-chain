@@ -146,61 +146,59 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
   ctx.stroke();
 }
 
-// 사슬 링크 — 라운드캡 선분 교대 배치 (타원형 고리 느낌), 단일 stroke()
+// 사슬 링크 — -o-o-o- 형태: 원형 링크 + 연결선, 단일 stroke()
 // phase에 따라 chainStart를 결정; exiting은 호출부에서 ctx.clip() 처리
 function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
   const isVert  = z.orientation === "vertical";
   const fullLen = isVert ? arena.h : arena.w;
   const base    = isVert ? arena.y : arena.x;
 
-  // 체인 시작 위치와 길이 계산
   let chainStart: number;
-  let chainLen: number;
+  let chainLen:   number;
 
   if (z.phase === "extending") {
-    chainLen  = z.drawLength;
+    chainLen   = z.drawLength;
     chainStart = z.direction === 1 ? base : base + fullLen - chainLen;
   } else if (z.phase === "active") {
-    chainLen  = fullLen;
+    chainLen   = fullLen;
     chainStart = base;
-  } else { // exiting: 같은 방향으로 이동
-    chainLen  = fullLen;
-    chainStart = z.direction === 1
-      ? base + z.exitOffset
-      : base - z.exitOffset;
+  } else { // exiting
+    chainLen   = fullLen;
+    chainStart = z.direction === 1 ? base + z.exitOffset : base - z.exitOffset;
   }
 
   if (chainLen <= 0) return;
 
-  const SPACING = 10;
-  const HL      = 4;   // 링크 절반 길이
-  const HW      = 1.5; // 링크 절반 굵기
+  const LINK_R = 3;   // 원 반지름
+  const STEP   = 13;  // 링크 중심 간격 (line = STEP - LINK_R*2 = 7px)
 
   ctx.globalAlpha = 1.0;
   ctx.strokeStyle = "#c8c8c8";
-  ctx.lineWidth   = HW * 2;
-  ctx.lineCap     = "round";
+  ctx.lineWidth   = 1.5;
+  ctx.lineCap     = "butt";
 
   ctx.beginPath();
-  let idx = 0;
-  for (let pos = chainStart; pos <= chainStart + chainLen; pos += SPACING, idx++) {
-    if (isVert) {
-      if (idx % 2 === 0) {
-        ctx.moveTo(z.centerPos - HL, pos);
-        ctx.lineTo(z.centerPos + HL, pos);
+  let prevPos: number | null = null;
+  for (let pos = chainStart; pos <= chainStart + chainLen; pos += STEP) {
+    const cx = isVert ? z.centerPos : pos;
+    const cy = isVert ? pos : z.centerPos;
+
+    // 이전 원 끝 → 현재 원 시작 연결선
+    if (prevPos !== null) {
+      if (isVert) {
+        ctx.moveTo(z.centerPos, prevPos + LINK_R);
+        ctx.lineTo(z.centerPos, cy - LINK_R);
       } else {
-        ctx.moveTo(z.centerPos, pos - HL);
-        ctx.lineTo(z.centerPos, pos + HL);
-      }
-    } else {
-      if (idx % 2 === 0) {
-        ctx.moveTo(pos, z.centerPos - HL);
-        ctx.lineTo(pos, z.centerPos + HL);
-      } else {
-        ctx.moveTo(pos - HL, z.centerPos);
-        ctx.lineTo(pos + HL, z.centerPos);
+        ctx.moveTo(prevPos + LINK_R, z.centerPos);
+        ctx.lineTo(cx - LINK_R, z.centerPos);
       }
     }
+
+    // 원형 링크
+    ctx.moveTo(cx + LINK_R, cy);
+    ctx.arc(cx, cy, LINK_R, 0, Math.PI * 2);
+
+    prevPos = pos;
   }
   ctx.stroke();
 }
