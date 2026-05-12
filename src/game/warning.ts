@@ -176,6 +176,22 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
 
   const STEP = 13;  // 링크 중심 간격 (line = STEP - LINK_R*2 = 7px)
 
+  // glow pass — 체인 경로를 굵은 반투명 선으로 1회만 그림 (shadowBlur 없음)
+  ctx.globalAlpha = 0.18;
+  ctx.strokeStyle = "#c8c8c8";
+  ctx.lineWidth   = LINK_R * 4;
+  ctx.lineCap     = "round";
+  ctx.beginPath();
+  if (isVert) {
+    ctx.moveTo(z.centerPos, chainStart);
+    ctx.lineTo(z.centerPos, chainStart + chainLen);
+  } else {
+    ctx.moveTo(chainStart, z.centerPos);
+    ctx.lineTo(chainStart + chainLen, z.centerPos);
+  }
+  ctx.stroke();
+
+  // main pass — 실제 고리 선명하게 렌더링
   ctx.globalAlpha = 1.0;
   ctx.strokeStyle = "#c8c8c8";
   ctx.lineWidth   = 1.5;
