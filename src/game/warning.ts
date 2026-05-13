@@ -111,7 +111,10 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       if (zones[j].arenaIdx === i) existing++;
     }
     const toSpawn = Math.min(count, MAX_ZONES_PER_ARENA - existing);
-    for (let n = 0; n < toSpawn; n++) spawnZone(i as 0 | 1, arenas[i]);
+    for (let n = 0; n < toSpawn; n++) {
+      const t = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
+      spawnZone(i as 0 | 1, arenas[i], t);
+    }
   }
 
   for (let i = zones.length - 1; i >= 0; i--) {
