@@ -12,6 +12,8 @@ export interface ChainConfig {
   warningColor:     string;  // 경고 띠/중앙선 색상
   linkColor:        string;  // 체인 링크 + glow 색상
   warningDuration?: number;  // 경고 단계 지속 시간 (미지정 시 WARNING_DURATION)
+  linkRadius?:      number;  // 링크 반지름 (미지정 시 LINK_R = 3)
+  bandHalfWidth?:   number;  // 경고 띠 반폭 (미지정 시 BAND_HALF_WIDTH = 24)
 }
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
@@ -44,6 +46,15 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     linkColor:       "#dd77ff",
     warningDuration: 2.6,   // 노말보다 길어서 플레이어가 충분히 속음
   },
+  giant: {
+    extendDuration: 0.80,
+    activeDuration: 2.5,
+    exitDuration:   0.60,
+    warningColor:   "#2266ff",
+    linkColor:      "#4499ff",
+    linkRadius:     9,     // normal LINK_R(3) 대비 3배
+    bandHalfWidth:  54,    // normal BAND_HALF_WIDTH(24) 대비 2.25배
+  },
 };
 
 // 아이템 획득 시 랜덤 지급에 사용
@@ -60,6 +71,7 @@ export interface Zone {
   exitOffset:  number;
   chainType:   string;   // CHAIN_CONFIGS 키
   fakePos:     number;   // fake 체인: 경고 표시 위치 (다른 타입에선 centerPos와 동일)
+  chainRadius: number;   // 충돌 판정 추가 반폭 — giant=9, 나머지=0
   turnDir:     1 | -1;   // turn 체인 꺾임 방향 (다른 타입에선 무시)
   turnPoint:   number;   // turn 체인: 꺾이는 canvas 좌표 (primary axis)
   seg1Len:     number;   // turn 체인: 1구간 길이 (px)
@@ -149,11 +161,13 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     seg2Len   = 0;
   }
 
+  const chainRadius = (CHAIN_CONFIGS[chainType] ?? CHAIN_CONFIGS["normal"]).linkRadius ?? 0;
+
   zones.push({
     orientation, centerPos, arenaIdx,
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
-    chainType, fakePos, turnDir, turnPoint, seg1Len, seg2Len,
+    chainType, fakePos, chainRadius, turnDir, turnPoint, seg1Len, seg2Len,
   });
 }
 
@@ -190,9 +204,10 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
     } else if (z.phase === "extending") {
       const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
       const arena  = arenas[z.arenaIdx];
+      const lkR    = cfg.linkRadius ?? LINK_R;
       const maxLen = z.chainType === "turn"
         ? z.seg1Len + z.seg2Len
-        : (z.orientation === "vertical" ? arena.h : arena.w) - 2 * LINK_R;
+        : (z.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
       z.drawLength = Math.min(maxLen, maxLen * (z.elapsed / cfg.extendDuration));
       if (z.elapsed >= cfg.extendDuration) {
         z.phase = "active"; z.elapsed = 0; z.drawLength = maxLen;
@@ -209,7 +224,8 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       } else {
         const arena      = arenas[z.arenaIdx];
         const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
-        const adjFullLen = fullLen - 2 * LINK_R;
+        const lkR        = cfg.linkRadius ?? LINK_R;
+        const adjFullLen = fullLen - 2 * lkR;
         z.exitOffset     = adjFullLen * (z.elapsed / cfg.exitDuration);
         if (z.exitOffset >= adjFullLen) zones.splice(i, 1);
       }
@@ -228,12 +244,13 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
   const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
   const isVert = z.orientation === "vertical";
 
+  const bHalf = cfg.bandHalfWidth ?? BAND_HALF_WIDTH;
   ctx.globalAlpha = alpha * 0.22;
   ctx.fillStyle   = cfg.warningColor;
   if (isVert) {
-    ctx.fillRect(z.centerPos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
+    ctx.fillRect(z.centerPos - bHalf, arena.y, bHalf * 2, arena.h);
   } else {
-    ctx.fillRect(arena.x, z.centerPos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
+    ctx.fillRect(arena.x, z.centerPos - bHalf, arena.w, bHalf * 2);
   }
 
   ctx.globalAlpha = alpha * 0.80;
@@ -403,6 +420,75 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
   ctx.stroke();
 }
 
+// Giant 체인 링크 — Normal보다 큰 링크 반지름, 더 넓은 glow
+function drawGiantChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
+  const cfg     = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+  const isVert  = z.orientation === "vertical";
+  const fullLen = isVert ? arena.h : arena.w;
+  const base    = isVert ? arena.y : arena.x;
+  const R       = cfg.linkRadius ?? LINK_R;
+  const adjBase    = base + R;
+  const adjFullLen = fullLen - 2 * R;
+
+  let chainStart: number;
+  let chainLen:   number;
+
+  if (z.phase === "extending") {
+    chainLen   = z.drawLength;
+    chainStart = z.direction === 1 ? adjBase : adjBase + adjFullLen - chainLen;
+  } else if (z.phase === "active") {
+    chainLen   = adjFullLen;
+    chainStart = adjBase;
+  } else { // exiting
+    chainLen   = adjFullLen;
+    chainStart = z.direction === 1 ? adjBase + z.exitOffset : adjBase - z.exitOffset;
+  }
+
+  if (chainLen <= 0) return;
+
+  const STEP = R * 3;  // 링크 간격 = 반지름 * 3 (gap ≈ R)
+
+  // glow pass
+  ctx.globalAlpha = 0.15;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth   = R * 3;
+  ctx.lineCap     = "round";
+  ctx.beginPath();
+  if (isVert) {
+    ctx.moveTo(z.centerPos, chainStart);
+    ctx.lineTo(z.centerPos, chainStart + chainLen);
+  } else {
+    ctx.moveTo(chainStart, z.centerPos);
+    ctx.lineTo(chainStart + chainLen, z.centerPos);
+  }
+  ctx.stroke();
+
+  // main pass
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth   = 2.5;
+  ctx.lineCap     = "butt";
+  ctx.beginPath();
+  let prevPos: number | null = null;
+  for (let pos = chainStart; pos <= chainStart + chainLen; pos += STEP) {
+    const cx = isVert ? z.centerPos : pos;
+    const cy = isVert ? pos : z.centerPos;
+    if (prevPos !== null) {
+      if (isVert) {
+        ctx.moveTo(z.centerPos, prevPos + R);
+        ctx.lineTo(z.centerPos, cy - R);
+      } else {
+        ctx.moveTo(prevPos + R, z.centerPos);
+        ctx.lineTo(cx - R, z.centerPos);
+      }
+    }
+    ctx.moveTo(cx + R, cy);
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    prevPos = pos;
+  }
+  ctx.stroke();
+}
+
 // Turn 체인 L자형 링크 렌더링 (glow + -o-o-o- 두 구간)
 function drawTurnChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
   const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
@@ -528,11 +614,9 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       if (z.chainType === "turn") drawTurnArrow(ctx, z, pulse);
 
     } else { // extending / active / exiting
-      if (z.chainType === "turn") {
-        drawTurnChainLinks(ctx, z, arena);
-      } else {
-        drawChainLinks(ctx, z, arena);
-      }
+      if (z.chainType === "turn") drawTurnChainLinks(ctx, z, arena);
+      else if (z.chainType === "giant") drawGiantChainLinks(ctx, z, arena);
+      else drawChainLinks(ctx, z, arena);
     }
 
     ctx.restore();

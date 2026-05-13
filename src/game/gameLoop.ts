@@ -87,7 +87,7 @@ export function startGameLoop(
       const dist = isVert
         ? Math.abs(p.x - chain.centerPos)
         : Math.abs(p.y - chain.centerPos);
-      if (dist >= p.radius) continue;
+      if (dist >= p.radius + chain.chainRadius) continue;
 
       // phase별 실제 충돌 구간 (adjBase~adjMax 내부 기준)
       let segStart: number;
