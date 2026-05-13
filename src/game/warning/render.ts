@@ -533,6 +533,58 @@ function drawTrackingChain(ctx: CanvasRenderingContext2D, z: Zone): void {
   ctx.stroke();
 }
 
+function drawMirrorTurnChain(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
+  const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
+  const lkR = cfg.linkRadius ?? LINK_R;
+  const drawn2 = Math.min(z.mirrorTurnLength, z.mirrorTurnLength * Math.min(1, z.elapsed / cfg.extendDuration));
+  const left = arena.x + lkR;
+  const right = arena.x + arena.w - lkR;
+  const top = z.centerPos - drawn2;
+
+  ctx.globalAlpha = 0.18;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth = lkR * 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(left, z.centerPos);
+  ctx.lineTo(right, z.centerPos);
+  if (drawn2 > 0) {
+    ctx.moveTo(z.mirrorTurnX, z.centerPos);
+    ctx.lineTo(z.mirrorTurnX, top);
+  }
+  ctx.stroke();
+
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "butt";
+  ctx.beginPath();
+
+  for (let x = left; x <= right; x += 13) {
+    if (x > left) {
+      ctx.moveTo(x - 13 + lkR, z.centerPos);
+      ctx.lineTo(x - lkR, z.centerPos);
+    }
+    ctx.moveTo(x + lkR, z.centerPos);
+    ctx.arc(x, z.centerPos, lkR, 0, Math.PI * 2);
+  }
+
+  if (drawn2 > 0) {
+    let prevY: number | null = null;
+    for (let y = z.centerPos; y >= top; y -= 13) {
+      if (prevY !== null) {
+        ctx.moveTo(z.mirrorTurnX, prevY - lkR);
+        ctx.lineTo(z.mirrorTurnX, y + lkR);
+      }
+      ctx.moveTo(z.mirrorTurnX + lkR, y);
+      ctx.arc(z.mirrorTurnX, y, lkR, 0, Math.PI * 2);
+      prevY = y;
+    }
+  }
+
+  ctx.stroke();
+}
+
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
   ctx.shadowBlur = 0;
 
@@ -555,7 +607,8 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       else drawBand(ctx, z, arena, pulse);
       if (z.chainType === "turn") drawTurnArrow(ctx, z, pulse);
     } else {
-      if (z.chainType === "turn") drawTurnChainLinks(ctx, z, arena);
+      if (z.mirrorTurnUp) drawMirrorTurnChain(ctx, z, arena);
+      else if (z.chainType === "turn") drawTurnChainLinks(ctx, z, arena);
       else if (z.chainType === "giant") drawGiantChainLinks(ctx, z, arena);
       else if (z.chainType === "phase") drawPhaseChainLinks(ctx, z, arena);
       else if (z.chainType === "tracking") drawTrackingChain(ctx, z);

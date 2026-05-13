@@ -1,4 +1,5 @@
 // HUD 렌더링 — FPS, 타이머, 게임오버 오버레이, 체인 보유 링
+import type { EncounterConfig } from "./encounter";
 import type { Player } from "./player";
 import { CHAIN_CONFIGS } from "./warning/index";
 
@@ -58,6 +59,42 @@ export function drawGameOver(
   ctx.fillStyle  = "#666666";
   ctx.font = "18px monospace";
   ctx.fillText("Press  R  to restart", cx, cy + 66);
+  ctx.restore();
+}
+
+export function drawEncounterIntro(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  encounter: EncounterConfig,
+  remaining: number,
+): void {
+  if (remaining <= 0) return;
+  const fade = Math.min(1, remaining / 0.45, (3 - remaining) / 0.45);
+  const cx = canvasWidth / 2;
+  const cy = canvasHeight * 0.16;
+
+  ctx.save();
+  ctx.globalAlpha = 0.92 * fade;
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(cx - 300, cy - 58, 600, 116);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "#ffffff";
+
+  ctx.shadowBlur = 14;
+  ctx.font = "bold 18px monospace";
+  ctx.fillText("ENCOUNTER", cx, cy - 25);
+
+  ctx.shadowBlur = 24;
+  ctx.font = "bold 34px monospace";
+  ctx.fillText(encounter.name.toUpperCase(), cx, cy + 8);
+
+  ctx.shadowBlur = 8;
+  ctx.font = "17px monospace";
+  ctx.fillText(encounter.description, cx, cy + 38);
   ctx.restore();
 }
 

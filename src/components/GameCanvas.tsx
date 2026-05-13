@@ -4,7 +4,9 @@ import { createArenas } from "../game/arena";
 import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
 
-export default function GameCanvas() {
+type GameMode = "casual" | "practice";
+
+export default function GameCanvas({ mode = "casual" }: { mode?: GameMode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -19,16 +21,19 @@ export default function GameCanvas() {
 
     // 초기화 순서: input → arenas → players → gameLoop
     const cleanupInput = initInput();
-    const arenas  = createArenas(canvas.width, canvas.height);
+    const arenas  = createArenas(canvas.width, canvas.height, mode);
     const players = createPlayers(arenas);
-    const cleanupLoop = startGameLoop(canvas, players, arenas);
+    const cleanupLoop = startGameLoop(canvas, players, arenas, {
+      enableAi: mode !== "practice",
+      practiceMode: mode === "practice",
+    });
 
     return () => {
       window.removeEventListener("resize", resize);
       cleanupInput();
       cleanupLoop();
     };
-  }, []);
+  }, [mode]);
 
   return (
     <canvas

@@ -1,4 +1,5 @@
 import type { Arena } from "../arena";
+import type { EncounterConfig } from "../encounter";
 import type { Player } from "../player";
 import {
   CHAIN_CONFIGS,
@@ -24,7 +25,7 @@ function spawnCount(gameTime: number): number {
   return 1;
 }
 
-function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
+function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig): void {
   const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
   let centerPos = orientation === "vertical"
@@ -111,7 +112,15 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     trackTurnAngle,
     trackTurned,
     trackPoints,
+    mirrorRemaining: encounter?.modifiers.mirrorBounceCount ?? 0,
+    mirrorTurnUp: false,
+    mirrorTurnX: 0,
+    mirrorTurnLength: 0,
   });
+}
+
+function canMirrorBounce(z: Zone): boolean {
+  return z.chainType === "normal" || z.chainType === "rush";
 }
 
 function updateTrackingZone(z: Zone, target: Player): void {
@@ -163,11 +172,20 @@ export function updateWarnings(
   arenas: [Arena, Arena],
   players: [Player, Player],
   gameTime: number,
+  options?: { practiceMode?: boolean },
+  encounter?: EncounterConfig,
 ): void {
-  const interval = currentSpawnInterval(gameTime);
-  const count = spawnCount(gameTime);
+  const practiceMode = options?.practiceMode ?? false;
+  const interval =
+    currentSpawnInterval(gameTime)
+    * (practiceMode ? 0.58 : 1)
+    * (encounter?.modifiers.chainSpawnIntervalMultiplier ?? 1);
+  const count =
+    spawnCount(gameTime)
+    + (practiceMode ? 1 : 0)
+    + (encounter?.modifiers.chainSpawnCountBonus ?? 0);
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < (practiceMode ? 1 : 2); i++) {
     spawnTimers[i] += dt;
     if (spawnTimers[i] < interval) continue;
     spawnTimers[i] = 0;
@@ -179,7 +197,7 @@ export function updateWarnings(
     const toSpawn = Math.min(count, MAX_ZONES_PER_ARENA - existing);
     for (let n = 0; n < toSpawn; n++) {
       const t = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
-      spawnZone(i as 0 | 1, arenas[i], t);
+      spawnZone(i as 0 | 1, arenas[i], t, encounter);
     }
   }
 
@@ -208,15 +226,27 @@ export function updateWarnings(
         : (z.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
       z.drawLength = Math.min(maxLen, maxLen * (z.elapsed / cfg.extendDuration));
       if (z.elapsed >= cfg.extendDuration) {
-        z.phase = "active";
-        z.elapsed = 0;
-        z.drawLength = maxLen;
+        if (z.mirrorRemaining > 0 && canMirrorBounce(z) && z.orientation === "horizontal") {
+          z.mirrorRemaining--;
+          z.phase = "active";
+          z.elapsed = 0;
+          z.drawLength = maxLen;
+          z.mirrorTurnUp = true;
+          z.mirrorTurnX = z.direction === 1 ? arena.x + arena.w - lkR : arena.x + lkR;
+          z.mirrorTurnLength = z.centerPos - (arena.y + lkR);
+        } else {
+          z.phase = "active";
+          z.elapsed = 0;
+          z.drawLength = maxLen;
+        }
       }
     } else if (z.phase === "active") {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
       if (z.chainType === "tracking") {
         updateTrackingZone(z, players[z.arenaIdx]);
         if (z.elapsed >= (cfg.lifetime ?? cfg.activeDuration)) zones.splice(i, 1);
+      } else if (z.mirrorTurnUp) {
+        if (z.elapsed >= cfg.activeDuration) zones.splice(i, 1);
       } else if (z.elapsed >= cfg.activeDuration) {
         z.phase = "exiting";
         z.elapsed = 0;
@@ -238,6 +268,6 @@ export function updateWarnings(
   }
 }
 
-export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena], chainType: string): void {
-  spawnZone(arenaIdx, arenas[arenaIdx], chainType);
+export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena], chainType: string, encounter?: EncounterConfig): void {
+  spawnZone(arenaIdx, arenas[arenaIdx], chainType, encounter);
 }

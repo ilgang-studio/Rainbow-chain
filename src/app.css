@@ -1,0 +1,209 @@
+body {
+  margin: 0;
+  background: #050505;
+  color: #ffffff;
+  font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+}
+
+.menu-shell {
+  min-height: 100vh;
+  padding: 0;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 32%),
+    #050505;
+  box-sizing: border-box;
+}
+
+.menu-frame {
+  position: relative;
+  min-height: 100vh;
+  padding: 28px 28px 36px;
+  background:
+    linear-gradient(
+      180deg,
+      #000000 0%,
+      rgba(8, 8, 8, 0.96) 28%,
+      rgba(20, 20, 20, 0.4) 66%,
+      rgba(255, 255, 255, 0.24) 100%
+    );
+  box-shadow:
+    0 0 22px rgba(255, 255, 255, 0.08),
+    inset 0 0 28px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.menu-background-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.menu-background-fx::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 34vh;
+  background:
+    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.22), transparent 68%),
+    linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.12) 100%);
+  opacity: 0.95;
+}
+
+.menu-background-fx::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 22vh;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+.menu-dust-particle {
+  position: absolute;
+  bottom: -4vh;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  animation-name: menu-dust-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+.menu-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 22%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 30%);
+  pointer-events: none;
+}
+
+.menu-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 72px;
+}
+
+.menu-title,
+.menu-nickname,
+.menu-button {
+  color: #f7f7f7;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.22),
+    0 0 18px rgba(255, 255, 255, 0.16);
+}
+
+.menu-title {
+  margin: 0;
+  font-size: clamp(2.8rem, 5vw, 4.3rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.menu-nickname {
+  padding-top: 6px;
+  font-size: clamp(2rem, 4vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.menu-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+  width: min(52vw, 880px);
+}
+
+.menu-buttons {
+  position: relative;
+  z-index: 1;
+}
+
+.menu-button {
+  position: relative;
+  width: 100%;
+  min-height: 148px;
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  background:
+    linear-gradient(180deg, rgba(12, 12, 12, 0.96), rgba(7, 7, 7, 0.94));
+  padding: 24px 32px;
+  text-align: right;
+  font: 700 clamp(2.1rem, 4.4vw, 4rem)/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 26px rgba(255, 255, 255, 0.1),
+    inset 0 0 18px rgba(255, 255, 255, 0.2);
+}
+
+.menu-button:hover,
+.menu-button:focus-visible {
+  transform: translateX(8px);
+  background:
+    linear-gradient(180deg, rgba(16, 16, 16, 1), rgba(10, 10, 10, 0.98));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.34),
+    0 0 16px rgba(255, 255, 255, 0.18),
+    0 0 34px rgba(255, 255, 255, 0.14),
+    inset 0 0 24px rgba(255, 255, 255, 0.28);
+  outline: none;
+}
+
+.menu-button-label {
+  margin: 0;
+  text-transform: lowercase;
+}
+
+@keyframes menu-dust-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+
+  12% {
+    transform: translate3d(calc(var(--dust-drift) * 0.18), -8vh, 0);
+    opacity: var(--dust-opacity);
+  }
+
+  68% {
+    transform: translate3d(calc(var(--dust-drift) * 0.72), -48vh, 0);
+    opacity: calc(var(--dust-opacity) * 0.52);
+  }
+
+  100% {
+    transform: translate3d(var(--dust-drift), -78vh, 0);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 960px) {
+  .menu-frame {
+    min-height: 100vh;
+    padding: 22px 18px 28px;
+  }
+
+  .menu-header {
+    margin-bottom: 44px;
+  }
+
+  .menu-stack {
+    width: 100%;
+    gap: 28px;
+  }
+
+  .menu-button {
+    min-height: 112px;
+    padding: 22px 20px;
+  }
+}

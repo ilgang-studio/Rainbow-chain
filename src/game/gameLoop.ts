@@ -2,9 +2,10 @@ import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
+import { getRandomEncounter, type EncounterConfig } from "./encounter";
 import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual } from "./warning/index";
-import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
-import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
+import { createItems, updateItemsWithRate, drawItems, tryPickup, resetItems } from "./item";
+import { drawFPS, drawTimer, drawGameOver, drawChainRing, drawEncounterIntro } from "./hud";
 import { createArenaAi, resetArenaAi, updateArenaAi } from "./ai";
 
 const MAX_DT = 1 / 30;
@@ -13,6 +14,7 @@ export function startGameLoop(
   canvas: HTMLCanvasElement,
   players: [Player, Player],
   arenas: [Arena, Arena],
+  options?: { enableAi?: boolean; practiceMode?: boolean },
 ): () => void {
   const ctx   = canvas.getContext("2d")!;
   let rafId   = 0;
@@ -20,6 +22,11 @@ export function startGameLoop(
   let isGameOver  = false;
   let deadIdx: 0 | 1 | null = null;
   let gameTime = 0;
+  const enableAi = options?.enableAi ?? true;
+  const practiceMode = options?.practiceMode ?? false;
+  const arenaCount = practiceMode ? 1 : 2;
+  let currentEncounter: EncounterConfig = getRandomEncounter();
+  let encounterIntroTimer = 3;
 
   // FPS 계산: 1초 단위 샘플링
   let fpsDisplay  = 0;
@@ -48,6 +55,8 @@ export function startGameLoop(
   const arenaAi = createArenaAi();
 
   function resetGame(): void {
+    currentEncounter = getRandomEncounter();
+    encounterIntroTimer = 3;
     for (let i = 0; i < 2; i++) {
       players[i].x         = arenas[i].x + arenas[i].w / 2;
       players[i].y         = arenas[i].y + arenas[i].h / 2;
@@ -65,6 +74,7 @@ export function startGameLoop(
   function checkCollisions(): void {
     const CHAIN_LINK_R = 3; // warning.ts LINK_R와 동일
     for (const chain of getActiveChains()) {
+      if (!enableAi && chain.arenaIdx === 1) continue;
       const p          = players[chain.arenaIdx];
       const arena      = arenas[chain.arenaIdx];
       const isVert     = chain.orientation === "vertical";
@@ -76,6 +86,34 @@ export function startGameLoop(
       if (chain.chainType === "phase") {
         const cfg = CHAIN_CONFIGS[chain.chainType] ?? CHAIN_CONFIGS["normal"];
         if (!getPhaseCycleVisual(chain.elapsed, cfg).solid) continue;
+      }
+
+      if (chain.mirrorTurnUp) {
+        const hitRadius = p.radius + chain.chainRadius;
+        const left = arena.x + CHAIN_LINK_R;
+        const right = arena.x + arena.w - CHAIN_LINK_R;
+        const drawn2 = Math.min(
+          chain.mirrorTurnLength,
+          chain.mirrorTurnLength * Math.min(1, chain.elapsed / ((CHAIN_CONFIGS[chain.chainType] ?? CHAIN_CONFIGS["normal"]).extendDuration)),
+        );
+
+        if (
+          Math.abs(p.y - chain.centerPos) < hitRadius
+          && p.x + p.radius >= left
+          && p.x - p.radius <= right
+        ) {
+          isGameOver = true; deadIdx = chain.arenaIdx; return;
+        }
+
+        if (
+          drawn2 > 0
+          && Math.abs(p.x - chain.mirrorTurnX) < hitRadius
+          && p.y + p.radius >= chain.centerPos - drawn2
+          && p.y - p.radius <= chain.centerPos
+        ) {
+          isGameOver = true; deadIdx = chain.arenaIdx; return;
+        }
+        continue;
       }
 
       if (chain.chainType === "tracking") {
@@ -172,10 +210,10 @@ export function startGameLoop(
     if (isGameOver) return;
 
     // 체인 발동: 해당 플레이어가 체인 보유 중일 때만
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < (enableAi ? 2 : 1); i++) {
       if (e.key === players[i].useKey && players[i].hasChain) {
         players[i].hasChain = false;
-        fireChain((1 - i) as 0 | 1, arenas, players[i].chainType);  // 상대 아레나에 발동
+        fireChain((practiceMode ? i : (1 - i)) as 0 | 1, arenas, players[i].chainType, currentEncounter);
       }
     }
   };
@@ -200,16 +238,22 @@ export function startGameLoop(
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // ── 아레나 테두리 ────────────────────────
-    for (const arena of arenas) drawArena(ctx, arena);
+    for (let i = 0; i < arenaCount; i++) drawArena(ctx, arenas[i]);
 
     if (!isGameOver) {
       gameTime += dt;
+      encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
 
       // ── 아이템 업데이트 ────────────────────
-      updateItems(items, dt, arenas);
+      updateItemsWithRate(
+        items,
+        dt,
+        arenas,
+        currentEncounter.modifiers.itemRespawnRateMultiplier ?? 1,
+      );
 
       // ── 아이템 획득 판정 ───────────────────
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < arenaCount; i++) {
         if (!players[i].hasChain && tryPickup(items[i], players[i])) {
           players[i].hasChain  = true;
           players[i].chainType = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
@@ -217,14 +261,18 @@ export function startGameLoop(
       }
 
       // ── 경고 / 사슬 업데이트 ───────────────
-      updateWarnings(dt, arenas, players, gameTime);
+      updateWarnings(dt, arenas, players, gameTime, {
+        practiceMode,
+      }, currentEncounter);
 
       // ── 플레이어 이동 ──────────────────────
       updatePlayer(players[0], dt, arenas[0]);
-      const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], items[1]);
-      if (aiUseChain && players[1].hasChain) {
-        players[1].hasChain = false;
-        fireChain(0, arenas, players[1].chainType);
+      if (enableAi) {
+        const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], items[1]);
+        if (aiUseChain && players[1].hasChain) {
+          players[1].hasChain = false;
+          fireChain(0, arenas, players[1].chainType, currentEncounter);
+        }
       }
 
       // ── 충돌 판정 ──────────────────────────
@@ -233,9 +281,9 @@ export function startGameLoop(
 
     // ── 렌더링 ──────────────────────────────
     drawWarnings(ctx, arenas);
-    drawItems(ctx, items);
+    drawItems(ctx, practiceMode ? [items[0]] : items);
 
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < (enableAi ? 2 : 1); i++) {
       drawPlayer(ctx, players[i]);
       if (players[i].hasChain) drawChainRing(ctx, players[i]);
     }
@@ -243,6 +291,7 @@ export function startGameLoop(
     // ── 타이머 + FPS ────────────────────────
     drawTimer(ctx, canvas.width, gameTime);
     drawFPS(ctx, fpsDisplay);
+    drawEncounterIntro(ctx, canvas.width, canvas.height, currentEncounter, encounterIntroTimer);
 
     // ── 게임 오버 오버레이 ───────────────────
     if (isGameOver) drawGameOver(ctx, canvas.width, canvas.height, deadIdx!);

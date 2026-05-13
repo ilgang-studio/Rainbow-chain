@@ -55,9 +55,18 @@ export function tryPickup(item: Item, player: { x: number; y: number; radius: nu
 }
 
 export function updateItems(items: [Item, Item], dt: number, arenas: [Arena, Arena]): void {
+  updateItemsWithRate(items, dt, arenas, 1);
+}
+
+export function updateItemsWithRate(
+  items: [Item, Item],
+  dt: number,
+  arenas: [Arena, Arena],
+  respawnRateMultiplier: number,
+): void {
   for (let i = 0; i < 2; i++) {
     if (items[i].active) continue;
-    items[i].respawnTimer -= dt;
+    items[i].respawnTimer -= dt * respawnRateMultiplier;
     if (items[i].respawnTimer <= 0) {
       const pos = randomPos(arenas[i]);
       items[i].x = pos.x;
@@ -67,7 +76,7 @@ export function updateItems(items: [Item, Item], dt: number, arenas: [Arena, Are
   }
 }
 
-export function drawItems(ctx: CanvasRenderingContext2D, items: [Item, Item]): void {
+export function drawItems(ctx: CanvasRenderingContext2D, items: Item[]): void {
   const t = Date.now() / 1000;
   const pulse = 0.6 + 0.4 * Math.sin(t * 2.8);
 

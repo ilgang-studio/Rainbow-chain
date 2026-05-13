@@ -114,6 +114,10 @@ export interface Zone {
   trackTurnAngle: number;
   trackTurned: boolean;
   trackPoints: TrackPoint[];
+  mirrorRemaining: number;
+  mirrorTurnUp: boolean;
+  mirrorTurnX: number;
+  mirrorTurnLength: number;
 }
 
 export const WARNING_DURATION    = 1.8;
