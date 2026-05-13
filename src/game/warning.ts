@@ -6,11 +6,12 @@ type Phase = "warning" | "flash" | "extending" | "active" | "exiting";
 // ── 체인 타입 설정 ─────────────────────────────────────────────────────────────
 // 새 체인 타입 추가 시 여기에만 항목을 추가하면 됩니다.
 export interface ChainConfig {
-  extendDuration: number;  // 뻗는 데 걸리는 시간 (초)
-  activeDuration: number;  // 완전히 뻗은 뒤 유지 시간 (초)
-  exitDuration:   number;  // 아레나 밖으로 나가는 시간 (초)
-  warningColor:   string;  // 경고 띠/중앙선 색상
-  linkColor:      string;  // 체인 링크 + glow 색상
+  extendDuration:   number;  // 뻗는 데 걸리는 시간 (초)
+  activeDuration:   number;  // 완전히 뻗은 뒤 유지 시간 (초)
+  exitDuration:     number;  // 아레나 밖으로 나가는 시간 (초)
+  warningColor:     string;  // 경고 띠/중앙선 색상
+  linkColor:        string;  // 체인 링크 + glow 색상
+  warningDuration?: number;  // 경고 단계 지속 시간 (미지정 시 WARNING_DURATION)
 }
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
@@ -35,6 +36,14 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     warningColor:   "#ffcc00",
     linkColor:      "#ffee44",
   },
+  fake: {
+    extendDuration:  0.55,
+    activeDuration:  1.8,
+    exitDuration:    0.45,
+    warningColor:    "#cc44ff",
+    linkColor:       "#dd77ff",
+    warningDuration: 2.6,   // 노말보다 길어서 플레이어가 충분히 속음
+  },
 };
 
 // 아이템 획득 시 랜덤 지급에 사용
@@ -50,6 +59,7 @@ export interface Zone {
   drawLength:  number;
   exitOffset:  number;
   chainType:   string;   // CHAIN_CONFIGS 키
+  fakePos:     number;   // fake 체인: 경고 표시 위치 (다른 타입에선 centerPos와 동일)
   turnDir:     1 | -1;   // turn 체인 꺾임 방향 (다른 타입에선 무시)
   turnPoint:   number;   // turn 체인: 꺾이는 canvas 좌표 (primary axis)
   seg1Len:     number;   // turn 체인: 1구간 길이 (px)
@@ -97,7 +107,7 @@ function spawnCount(gameTime: number): number {
 function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
   const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
-  const centerPos = orientation === "vertical"
+  let centerPos = orientation === "vertical"
     ? arena.x + pad + Math.random() * (arena.w - pad * 2)
     : arena.y + pad + Math.random() * (arena.h - pad * 2);
   const direction: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
@@ -105,6 +115,13 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
 
   // Turn 체인 전용: 꺾임 지점 + 구간 길이 계산
   const isVert     = orientation === "vertical";
+
+  // Fake 체인: fakePos = 경고 위치, centerPos = 아레나 반대편 실제 체인 위치
+  const fakePos = centerPos;
+  if (chainType === "fake") {
+    const axisCenter = isVert ? arena.x + arena.w / 2 : arena.y + arena.h / 2;
+    centerPos = 2 * axisCenter - centerPos;
+  }
   const fullLen    = isVert ? arena.h : arena.w;
   const base       = isVert ? arena.y : arena.x;
   const adjBase    = base + LINK_R;
@@ -136,7 +153,7 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     orientation, centerPos, arenaIdx,
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
-    chainType, turnDir, turnPoint, seg1Len, seg2Len,
+    chainType, fakePos, turnDir, turnPoint, seg1Len, seg2Len,
   });
 }
 
@@ -164,7 +181,8 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
     z.elapsed += dt;
 
     if (z.phase === "warning") {
-      if (z.elapsed >= WARNING_DURATION) { z.phase = "flash"; z.elapsed = 0; }
+      const wDur = (CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"]).warningDuration ?? WARNING_DURATION;
+      if (z.elapsed >= wDur) { z.phase = "flash"; z.elapsed = 0; }
 
     } else if (z.phase === "flash") {
       if (z.elapsed >= FLASH_DURATION) { z.phase = "extending"; z.elapsed = 0; z.drawLength = 0; }
@@ -230,6 +248,83 @@ function drawBand(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: n
     ctx.lineTo(arena.x + arena.w, z.centerPos);
   }
   ctx.stroke();
+}
+
+// Turn 체인 경고 단계: 꺾일 방향 화살표
+function drawTurnArrow(ctx: CanvasRenderingContext2D, z: Zone, alpha: number): void {
+  const isVert = z.orientation === "vertical";
+  const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+
+  const ax = isVert ? z.centerPos : z.turnPoint;
+  const ay = isVert ? z.turnPoint : z.centerPos;
+
+  // 화살표가 가리키는 방향 (2차 축)
+  const dx = isVert ? z.turnDir : 0;
+  const dy = isVert ? 0 : z.turnDir;
+
+  const TIP  = 9;
+  const BACK = 3;
+  const HALF = 6;
+
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.fillStyle   = cfg.warningColor;
+  ctx.beginPath();
+  ctx.moveTo(ax + dx * TIP,                    ay + dy * TIP);
+  ctx.lineTo(ax - dx * BACK - dy * HALF,       ay - dy * BACK + dx * HALF);
+  ctx.lineTo(ax - dx * BACK + dy * HALF,       ay - dy * BACK - dx * HALF);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Fake 체인 경고 띠 — fakePos 위치에 보라색 + glitch 효과
+function drawFakeWarning(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena, alpha: number): void {
+  const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+  const isVert = z.orientation === "vertical";
+  const pos    = z.fakePos;
+
+  ctx.globalAlpha = alpha * 0.22;
+  ctx.fillStyle   = cfg.warningColor;
+  if (isVert) ctx.fillRect(pos - BAND_HALF_WIDTH, arena.y, BAND_HALF_WIDTH * 2, arena.h);
+  else        ctx.fillRect(arena.x, pos - BAND_HALF_WIDTH, arena.w, BAND_HALF_WIDTH * 2);
+
+  // 중앙선 — 구간마다 랜덤 흔들림으로 glitch 표현
+  ctx.globalAlpha = alpha * 0.80;
+  ctx.strokeStyle = cfg.warningColor;
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  const SEG = 18;
+  if (isVert) {
+    for (let y = arena.y; y < arena.y + arena.h; y += SEG) {
+      const gx = pos + (Math.random() < 0.3 ? (Math.random() - 0.5) * 7 : 0);
+      ctx.moveTo(gx, y);
+      ctx.lineTo(gx, Math.min(y + SEG, arena.y + arena.h));
+    }
+  } else {
+    for (let x = arena.x; x < arena.x + arena.w; x += SEG) {
+      const gy = pos + (Math.random() < 0.3 ? (Math.random() - 0.5) * 7 : 0);
+      ctx.moveTo(x, gy);
+      ctx.lineTo(Math.min(x + SEG, arena.x + arena.w), gy);
+    }
+  }
+  ctx.stroke();
+
+  // 추가 glitch 잔상 — 짧은 랜덤 선 3개
+  ctx.globalAlpha = alpha * 0.30;
+  ctx.lineWidth   = 1;
+  for (let i = 0; i < 3; i++) {
+    const off = (Math.random() - 0.5) * BAND_HALF_WIDTH * 1.5;
+    ctx.beginPath();
+    if (isVert) {
+      const y1 = arena.y + Math.random() * arena.h;
+      ctx.moveTo(pos + off, y1);
+      ctx.lineTo(pos + off, y1 + Math.random() * 28 + 6);
+    } else {
+      const x1 = arena.x + Math.random() * arena.w;
+      ctx.moveTo(x1, pos + off);
+      ctx.lineTo(x1 + Math.random() * 28 + 6, pos + off);
+    }
+    ctx.stroke();
+  }
 }
 
 // 사슬 링크 — -o-o-o- 형태: 원형 링크 + 연결선, 단일 stroke()
@@ -420,11 +515,17 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
     ctx.clip();
 
     if (z.phase === "warning") {
-      drawBand(ctx, z, arena, z.elapsed / WARNING_DURATION);
+      const wDur = (CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"]).warningDuration ?? WARNING_DURATION;
+      const a    = z.elapsed / wDur;
+      if (z.chainType === "fake") drawFakeWarning(ctx, z, arena, a);
+      else drawBand(ctx, z, arena, a);
+      if (z.chainType === "turn") drawTurnArrow(ctx, z, a);
 
     } else if (z.phase === "flash") {
       const pulse = 0.5 + 0.5 * Math.sin((z.elapsed / FLASH_DURATION) * Math.PI * 10);
-      drawBand(ctx, z, arena, pulse);
+      if (z.chainType === "fake") drawFakeWarning(ctx, z, arena, pulse);
+      else drawBand(ctx, z, arena, pulse);
+      if (z.chainType === "turn") drawTurnArrow(ctx, z, pulse);
 
     } else { // extending / active / exiting
       if (z.chainType === "turn") {
