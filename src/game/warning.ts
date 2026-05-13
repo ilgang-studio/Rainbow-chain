@@ -380,11 +380,11 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
   ctx.lineCap     = "round";
   ctx.beginPath();
   if (isVert) {
-    ctx.moveTo(z.centerPos, chainStart);
-    ctx.lineTo(z.centerPos, chainStart + chainLen);
+    ctx.moveTo(z.centerPos, chainStart - LINK_R);
+    ctx.lineTo(z.centerPos, chainStart + chainLen + LINK_R);
   } else {
-    ctx.moveTo(chainStart, z.centerPos);
-    ctx.lineTo(chainStart + chainLen, z.centerPos);
+    ctx.moveTo(chainStart - LINK_R, z.centerPos);
+    ctx.lineTo(chainStart + chainLen + LINK_R, z.centerPos);
   }
   ctx.stroke();
 
@@ -416,6 +416,16 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
     ctx.arc(cx, cy, LINK_R, 0, Math.PI * 2);
 
     prevPos = pos;
+  }
+  // 꼬리 연결선: 마지막 링크 끝 → 반대쪽 벽 (clip이 아레나 경계 처리)
+  if (prevPos !== null) {
+    if (isVert) {
+      ctx.moveTo(z.centerPos, prevPos + LINK_R);
+      ctx.lineTo(z.centerPos, chainStart + chainLen + LINK_R);
+    } else {
+      ctx.moveTo(prevPos + LINK_R, z.centerPos);
+      ctx.lineTo(chainStart + chainLen + LINK_R, z.centerPos);
+    }
   }
   ctx.stroke();
 }
@@ -455,11 +465,11 @@ function drawGiantChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Aren
   ctx.lineCap     = "round";
   ctx.beginPath();
   if (isVert) {
-    ctx.moveTo(z.centerPos, chainStart);
-    ctx.lineTo(z.centerPos, chainStart + chainLen);
+    ctx.moveTo(z.centerPos, chainStart - R);
+    ctx.lineTo(z.centerPos, chainStart + chainLen + R);
   } else {
-    ctx.moveTo(chainStart, z.centerPos);
-    ctx.lineTo(chainStart + chainLen, z.centerPos);
+    ctx.moveTo(chainStart - R, z.centerPos);
+    ctx.lineTo(chainStart + chainLen + R, z.centerPos);
   }
   ctx.stroke();
 
@@ -485,6 +495,16 @@ function drawGiantChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Aren
     ctx.moveTo(cx + R, cy);
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     prevPos = pos;
+  }
+  // 꼬리 연결선: 마지막 링크 끝 → 반대쪽 벽
+  if (prevPos !== null) {
+    if (isVert) {
+      ctx.moveTo(z.centerPos, prevPos + R);
+      ctx.lineTo(z.centerPos, chainStart + chainLen + R);
+    } else {
+      ctx.moveTo(prevPos + R, z.centerPos);
+      ctx.lineTo(chainStart + chainLen + R, z.centerPos);
+    }
   }
   ctx.stroke();
 }
