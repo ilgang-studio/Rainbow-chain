@@ -1,7 +1,9 @@
 import type { Arena } from "./arena";
+import type { Player } from "./player";
 
 export type Orientation = "horizontal" | "vertical";
 type Phase = "warning" | "flash" | "extending" | "active" | "exiting";
+interface TrackPoint { x: number; y: number; }
 
 // ── 체인 타입 설정 ─────────────────────────────────────────────────────────────
 // 새 체인 타입 추가 시 여기에만 항목을 추가하면 됩니다.
@@ -14,6 +16,11 @@ export interface ChainConfig {
   warningDuration?: number;  // 경고 단계 지속 시간 (미지정 시 WARNING_DURATION)
   linkRadius?:      number;  // 링크 반지름 (미지정 시 LINK_R = 3)
   bandHalfWidth?:   number;  // 경고 띠 반폭 (미지정 시 BAND_HALF_WIDTH = 24)
+  trackingStrength?: number; // Tracking 체인의 유도 강도
+  maxTurnRate?:      number; // Tracking 체인의 최대 회전 속도 (rad/s)
+  speed?:            number; // Tracking 체인 헤드 이동 속도
+  chainWidth?:       number; // Tracking 체인 몸통 두께
+  lifetime?:         number; // Tracking 체인 생존 시간
 }
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
@@ -55,6 +62,19 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     linkRadius:     9,     // normal LINK_R(3) 대비 3배
     bandHalfWidth:  54,    // normal BAND_HALF_WIDTH(24) 대비 2.25배
   },
+  tracking: {
+    extendDuration:   0.01,
+    activeDuration:   1.55,
+    exitDuration:     0.01,
+    warningDuration:  1.4,
+    warningColor:     "#00cc66",
+    linkColor:        "#44ff99",
+    trackingStrength: 0.16,
+    maxTurnRate:      0.9,
+    speed:            260,
+    chainWidth:       16,
+    lifetime:         1.55,
+  },
 };
 
 // 아이템 획득 시 랜덤 지급에 사용
@@ -76,6 +96,12 @@ export interface Zone {
   turnPoint:   number;   // turn 체인: 꺾이는 canvas 좌표 (primary axis)
   seg1Len:     number;   // turn 체인: 1구간 길이 (px)
   seg2Len:     number;   // turn 체인: 2구간 길이 (px)
+  trackHeadX:  number;   // tracking 체인 헤드 위치 X
+  trackHeadY:  number;   // tracking 체인 헤드 위치 Y
+  trackDirX:   number;   // tracking 체인 진행 방향 X
+  trackDirY:   number;   // tracking 체인 진행 방향 Y
+  trackBaseAngle: number;// tracking 체인 초기 직진 방향 각도
+  trackPoints: TrackPoint[]; // tracking 체인 궤적
 }
 
 const WARNING_DURATION    = 1.8;
@@ -87,6 +113,16 @@ const LINK_R              = 3;
 
 const zones: Zone[] = [];
 const spawnTimers: [number, number] = [1.2, SPAWN_INTERVAL * 0.5 + 0.9];
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeAngle(angle: number): number {
+  while (angle > Math.PI) angle -= Math.PI * 2;
+  while (angle < -Math.PI) angle += Math.PI * 2;
+  return angle;
+}
 
 const _chainBuf: Zone[] = [];
 export function getActiveChains(): Zone[] {
@@ -161,17 +197,125 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     seg2Len   = 0;
   }
 
-  const chainRadius = (CHAIN_CONFIGS[chainType] ?? CHAIN_CONFIGS["normal"]).linkRadius ?? 0;
+  const cfg = CHAIN_CONFIGS[chainType] ?? CHAIN_CONFIGS["normal"];
+  const chainRadius = cfg.linkRadius ?? 0;
+  const trackHalfWidth = (cfg.chainWidth ?? 16) * 0.5;
+  const trackHeadX = isVert
+    ? centerPos
+    : (direction === 1 ? arena.x + trackHalfWidth : arena.x + arena.w - trackHalfWidth);
+  const trackHeadY = isVert
+    ? (direction === 1 ? arena.y + trackHalfWidth : arena.y + arena.h - trackHalfWidth)
+    : centerPos;
+  const trackDirX = isVert ? 0 : direction;
+  const trackDirY = isVert ? direction : 0;
+  const trackBaseAngle = Math.atan2(trackDirY, trackDirX);
+  const trackPoints: TrackPoint[] = [{ x: trackHeadX, y: trackHeadY }];
 
   zones.push({
     orientation, centerPos, arenaIdx,
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
     chainType, fakePos, chainRadius, turnDir, turnPoint, seg1Len, seg2Len,
+    trackHeadX, trackHeadY, trackDirX, trackDirY, trackBaseAngle, trackPoints,
   });
 }
 
-export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: number): void {
+function updateTrackingZone(z: Zone, target: Player, arena: Arena, dt: number): void {
+  const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+  const trackingStrength = cfg.trackingStrength ?? 0.16;
+  const maxTurnRate = cfg.maxTurnRate ?? 0.9;
+  const speed = cfg.speed ?? 260;
+  const maxDeviation = Math.PI / 3;
+
+  const currentAngle = Math.atan2(z.trackDirY, z.trackDirX);
+  const targetAngle = Math.atan2(target.y - z.trackHeadY, target.x - z.trackHeadX);
+  let turnDelta = normalizeAngle(targetAngle - currentAngle) * trackingStrength;
+  turnDelta = clamp(turnDelta, -maxTurnRate * dt, maxTurnRate * dt);
+
+  let nextAngle = currentAngle + turnDelta;
+  const relativeAngle = clamp(
+    normalizeAngle(nextAngle - z.trackBaseAngle),
+    -maxDeviation,
+    maxDeviation,
+  );
+  nextAngle = z.trackBaseAngle + relativeAngle;
+
+  z.trackDirX = Math.cos(nextAngle);
+  z.trackDirY = Math.sin(nextAngle);
+  z.trackHeadX += z.trackDirX * speed * dt;
+  z.trackHeadY += z.trackDirY * speed * dt;
+
+  const last = z.trackPoints[z.trackPoints.length - 1];
+  if (!last) {
+    z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
+    return;
+  }
+
+  const dx = z.trackHeadX - last.x;
+  const dy = z.trackHeadY - last.y;
+  if (Math.sqrt(dx * dx + dy * dy) >= 5) {
+    z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
+  } else {
+    last.x = z.trackHeadX;
+    last.y = z.trackHeadY;
+  }
+
+  const margin = (cfg.chainWidth ?? 16) * 1.2;
+  if (
+    z.trackHeadX < arena.x - margin || z.trackHeadX > arena.x + arena.w + margin ||
+    z.trackHeadY < arena.y - margin || z.trackHeadY > arena.y + arena.h + margin
+  ) {
+    z.elapsed = cfg.lifetime ?? cfg.activeDuration;
+  }
+}
+
+function sampleTrackingPoints(points: TrackPoint[], spacing: number): TrackPoint[] {
+  if (points.length <= 1) return points.slice();
+
+  const sampled: TrackPoint[] = [{ x: points[0].x, y: points[0].y }];
+  let lastSample = points[0];
+  let carry = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    let start = { x: points[i - 1].x, y: points[i - 1].y };
+    const end = points[i];
+    let segDx = end.x - start.x;
+    let segDy = end.y - start.y;
+    let segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+    if (segLen <= 0.0001) continue;
+
+    while (carry + segLen >= spacing) {
+      const t = (spacing - carry) / segLen;
+      const sample = {
+        x: start.x + segDx * t,
+        y: start.y + segDy * t,
+      };
+      sampled.push(sample);
+      lastSample = sample;
+      start = sample;
+      segDx = end.x - start.x;
+      segDy = end.y - start.y;
+      segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+      carry = 0;
+      if (segLen <= 0.0001) break;
+    }
+
+    carry += segLen;
+  }
+
+  const lastPoint = points[points.length - 1];
+  if (lastSample.x !== lastPoint.x || lastSample.y !== lastPoint.y) {
+    sampled.push({ x: lastPoint.x, y: lastPoint.y });
+  }
+  return sampled;
+}
+
+export function updateWarnings(
+  dt: number,
+  arenas: [Arena, Arena],
+  players: [Player, Player],
+  gameTime: number,
+): void {
   const interval = currentSpawnInterval(gameTime);
   const count    = spawnCount(gameTime);
   for (let i = 0; i < 2; i++) {
@@ -199,7 +343,11 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       if (z.elapsed >= wDur) { z.phase = "flash"; z.elapsed = 0; }
 
     } else if (z.phase === "flash") {
-      if (z.elapsed >= FLASH_DURATION) { z.phase = "extending"; z.elapsed = 0; z.drawLength = 0; }
+      if (z.elapsed >= FLASH_DURATION) {
+        z.phase = z.chainType === "tracking" ? "active" : "extending";
+        z.elapsed = 0;
+        z.drawLength = 0;
+      }
 
     } else if (z.phase === "extending") {
       const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
@@ -215,7 +363,12 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
 
     } else if (z.phase === "active") {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
-      if (z.elapsed >= cfg.activeDuration) { z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0; }
+      if (z.chainType === "tracking") {
+        updateTrackingZone(z, players[z.arenaIdx], arenas[z.arenaIdx], dt);
+        if (z.elapsed >= (cfg.lifetime ?? cfg.activeDuration)) zones.splice(i, 1);
+      } else if (z.elapsed >= cfg.activeDuration) {
+        z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0;
+      }
 
     } else { // exiting
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
@@ -615,6 +768,52 @@ function drawTurnChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena
   ctx.stroke();
 }
 
+function drawTrackingChain(ctx: CanvasRenderingContext2D, z: Zone): void {
+  const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+  const width = cfg.chainWidth ?? 16;
+  const connectorWidth = width * 0.42;
+  const ringRadius = width * 0.34;
+  const points = sampleTrackingPoints(z.trackPoints, Math.max(12, width * 0.9));
+  if (points.length === 0) return;
+
+  if (points.length > 1) {
+    ctx.globalAlpha = 0.16;
+    ctx.strokeStyle = cfg.linkColor;
+    ctx.lineWidth = width * 1.35;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth = connectorWidth;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (points.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.lineWidth = Math.max(2, width * 0.18);
+  ctx.lineCap = "butt";
+  ctx.beginPath();
+  for (const point of points) {
+    ctx.moveTo(point.x + ringRadius, point.y);
+    ctx.arc(point.x, point.y, ringRadius, 0, Math.PI * 2);
+  }
+  ctx.stroke();
+}
+
 // ── 메인 렌더 ────────────────────────────────────────────────────────────────
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
   ctx.shadowBlur = 0;
@@ -644,6 +843,7 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
     } else { // extending / active / exiting
       if (z.chainType === "turn") drawTurnChainLinks(ctx, z, arena);
       else if (z.chainType === "giant") drawGiantChainLinks(ctx, z, arena);
+      else if (z.chainType === "tracking") drawTrackingChain(ctx, z);
       else drawChainLinks(ctx, z, arena);
     }
 

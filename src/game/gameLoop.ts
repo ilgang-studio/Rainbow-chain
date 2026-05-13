@@ -2,7 +2,7 @@ import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
-import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS } from "./warning";
+import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS } from "./warning";
 import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
 
@@ -24,6 +24,24 @@ export function startGameLoop(
   let fpsDisplay  = 0;
   let fpsFrames   = 0;
   let fpsAccum    = 0;
+
+  function pointToSegmentDistance(
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+  ): number {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq <= 0.0001) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    const cx = ax + dx * t;
+    const cy = ay + dy * t;
+    return Math.hypot(px - cx, py - cy);
+  }
 
   const items = createItems(arenas);
 
@@ -51,6 +69,26 @@ export function startGameLoop(
       const base       = isVert ? arena.y : arena.x;
       const adjBase    = base + CHAIN_LINK_R;
       const adjMax     = base + fullLen - CHAIN_LINK_R;
+
+      if (chain.chainType === "tracking") {
+        const cfg = CHAIN_CONFIGS[chain.chainType] ?? CHAIN_CONFIGS["normal"];
+        const hitRadius = p.radius + (cfg.chainWidth ?? 16) * 0.5;
+        const points = chain.trackPoints;
+        if (points.length === 1) {
+          if (Math.hypot(p.x - points[0].x, p.y - points[0].y) <= hitRadius) {
+            isGameOver = true; deadIdx = chain.arenaIdx; return;
+          }
+        } else {
+          for (let i = 1; i < points.length; i++) {
+            const a = points[i - 1];
+            const b = points[i];
+            if (pointToSegmentDistance(p.x, p.y, a.x, a.y, b.x, b.y) <= hitRadius) {
+              isGameOver = true; deadIdx = chain.arenaIdx; return;
+            }
+          }
+        }
+        continue;
+      }
 
       // Turn 체인: L자형 두 구간 별도 판정
       if (chain.chainType === "turn") {
@@ -171,7 +209,7 @@ export function startGameLoop(
       }
 
       // ── 경고 / 사슬 업데이트 ───────────────
-      updateWarnings(dt, arenas, gameTime);
+      updateWarnings(dt, arenas, players, gameTime);
 
       // ── 플레이어 이동 ──────────────────────
       updatePlayer(players[0], dt, arenas[0]);
