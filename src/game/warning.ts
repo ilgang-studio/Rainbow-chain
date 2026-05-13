@@ -22,11 +22,18 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     linkColor:      "#c8c8c8",
   },
   rush: {
-    extendDuration: 0.22,   // normal 대비 2배 빠름
-    activeDuration: 0.7,    // 짧은 유지 시간
+    extendDuration: 0.22,
+    activeDuration: 0.7,
     exitDuration:   0.22,
     warningColor:   "#ff2200",
     linkColor:      "#ff5533",
+  },
+  turn: {
+    extendDuration: 0.55,   // 두 선분을 합산하므로 약간 느림
+    activeDuration: 1.6,
+    exitDuration:   0.55,
+    warningColor:   "#ffcc00",
+    linkColor:      "#ffee44",
   },
 };
 
@@ -42,7 +49,11 @@ export interface Zone {
   direction:   1 | -1;
   drawLength:  number;
   exitOffset:  number;
-  chainType:   string;  // CHAIN_CONFIGS 키 ("normal" | "rush" | ...)
+  chainType:   string;   // CHAIN_CONFIGS 키
+  turnDir:     1 | -1;   // turn 체인 꺾임 방향 (다른 타입에선 무시)
+  turnPoint:   number;   // turn 체인: 꺾이는 canvas 좌표 (primary axis)
+  seg1Len:     number;   // turn 체인: 1구간 길이 (px)
+  seg2Len:     number;   // turn 체인: 2구간 길이 (px)
 }
 
 const WARNING_DURATION    = 1.8;
@@ -90,11 +101,42 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     ? arena.x + pad + Math.random() * (arena.w - pad * 2)
     : arena.y + pad + Math.random() * (arena.h - pad * 2);
   const direction: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+  const turnDir:  1 | -1 = Math.random() < 0.5 ? 1 : -1;
+
+  // Turn 체인 전용: 꺾임 지점 + 구간 길이 계산
+  const isVert     = orientation === "vertical";
+  const fullLen    = isVert ? arena.h : arena.w;
+  const base       = isVert ? arena.y : arena.x;
+  const adjBase    = base + LINK_R;
+  const adjFullLen = fullLen - 2 * LINK_R;
+  const turnRatio  = 0.4 + Math.random() * 0.2;  // 40~60% 지점에서 꺾임
+
+  let turnPoint: number;
+  let seg1Len:   number;
+  let seg2Len:   number;
+
+  if (chainType === "turn") {
+    if (direction === 1) {
+      turnPoint = adjBase + adjFullLen * turnRatio;
+      seg1Len   = turnPoint - adjBase;
+    } else {
+      turnPoint = adjBase + adjFullLen * (1 - turnRatio);
+      seg1Len   = adjBase + adjFullLen - turnPoint;
+    }
+    seg2Len = isVert
+      ? (turnDir === 1 ? (arena.x + arena.w - LINK_R) - centerPos : centerPos - (arena.x + LINK_R))
+      : (turnDir === 1 ? (arena.y + arena.h - LINK_R) - centerPos : centerPos - (arena.y + LINK_R));
+  } else {
+    turnPoint = 0;
+    seg1Len   = 0;
+    seg2Len   = 0;
+  }
+
   zones.push({
     orientation, centerPos, arenaIdx,
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
-    chainType,
+    chainType, turnDir, turnPoint, seg1Len, seg2Len,
   });
 }
 
@@ -128,13 +170,14 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       if (z.elapsed >= FLASH_DURATION) { z.phase = "extending"; z.elapsed = 0; z.drawLength = 0; }
 
     } else if (z.phase === "extending") {
-      const cfg        = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
-      const arena      = arenas[z.arenaIdx];
-      const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
-      const adjFullLen = fullLen - 2 * LINK_R;
-      z.drawLength     = Math.min(adjFullLen, adjFullLen * (z.elapsed / cfg.extendDuration));
+      const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+      const arena  = arenas[z.arenaIdx];
+      const maxLen = z.chainType === "turn"
+        ? z.seg1Len + z.seg2Len
+        : (z.orientation === "vertical" ? arena.h : arena.w) - 2 * LINK_R;
+      z.drawLength = Math.min(maxLen, maxLen * (z.elapsed / cfg.extendDuration));
       if (z.elapsed >= cfg.extendDuration) {
-        z.phase = "active"; z.elapsed = 0; z.drawLength = adjFullLen;
+        z.phase = "active"; z.elapsed = 0; z.drawLength = maxLen;
       }
 
     } else if (z.phase === "active") {
@@ -142,12 +185,16 @@ export function updateWarnings(dt: number, arenas: [Arena, Arena], gameTime: num
       if (z.elapsed >= cfg.activeDuration) { z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0; }
 
     } else { // exiting
-      const cfg        = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
-      const arena      = arenas[z.arenaIdx];
-      const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
-      const adjFullLen = fullLen - 2 * LINK_R;
-      z.exitOffset     = adjFullLen * (z.elapsed / cfg.exitDuration);
-      if (z.exitOffset >= adjFullLen) zones.splice(i, 1);
+      const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+      if (z.chainType === "turn") {
+        if (z.elapsed >= cfg.exitDuration) zones.splice(i, 1);
+      } else {
+        const arena      = arenas[z.arenaIdx];
+        const fullLen    = z.orientation === "vertical" ? arena.h : arena.w;
+        const adjFullLen = fullLen - 2 * LINK_R;
+        z.exitOffset     = adjFullLen * (z.elapsed / cfg.exitDuration);
+        if (z.exitOffset >= adjFullLen) zones.splice(i, 1);
+      }
     }
   }
 }
@@ -261,6 +308,104 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
   ctx.stroke();
 }
 
+// Turn 체인 L자형 링크 렌더링 (glow + -o-o-o- 두 구간)
+function drawTurnChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
+  const cfg    = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
+  const isVert = z.orientation === "vertical";
+  const fullLen    = isVert ? arena.h : arena.w;
+  const base       = isVert ? arena.y : arena.x;
+  const adjBase    = base + LINK_R;
+  const adjFullLen = fullLen - 2 * LINK_R;
+
+  const drawn1 = Math.min(z.drawLength, z.seg1Len);
+  const drawn2 = Math.max(0, z.drawLength - z.seg1Len);
+
+  let exitAlpha = 1.0;
+  if (z.phase === "exiting") {
+    exitAlpha = Math.max(0, 1 - z.elapsed / cfg.exitDuration);
+  }
+
+  // Seg1 시작점 (primary axis 상의 진입 좌표)
+  const seg1Origin = z.direction === 1 ? adjBase : adjBase + adjFullLen;
+
+  const STEP = 13;
+
+  // glow pass — 두 세그먼트
+  ctx.globalAlpha = 0.18 * exitAlpha;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth   = LINK_R * 4;
+  ctx.lineCap     = "round";
+  ctx.beginPath();
+  if (drawn1 > 0) {
+    if (isVert) {
+      ctx.moveTo(z.centerPos, seg1Origin);
+      ctx.lineTo(z.centerPos, seg1Origin + z.direction * drawn1);
+    } else {
+      ctx.moveTo(seg1Origin, z.centerPos);
+      ctx.lineTo(seg1Origin + z.direction * drawn1, z.centerPos);
+    }
+  }
+  if (drawn2 > 0) {
+    if (isVert) {
+      ctx.moveTo(z.centerPos, z.turnPoint);
+      ctx.lineTo(z.centerPos + z.turnDir * drawn2, z.turnPoint);
+    } else {
+      ctx.moveTo(z.turnPoint, z.centerPos);
+      ctx.lineTo(z.turnPoint, z.centerPos + z.turnDir * drawn2);
+    }
+  }
+  ctx.stroke();
+
+  // main pass — -o-o-o- 링크
+  ctx.globalAlpha = exitAlpha;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth   = 1.5;
+  ctx.lineCap     = "butt";
+  ctx.beginPath();
+
+  // Seg1 링크
+  if (drawn1 > 0) {
+    let prevD: number | null = null;
+    for (let d = 0; d <= drawn1; d += STEP) {
+      const cx = isVert ? z.centerPos : seg1Origin + z.direction * d;
+      const cy = isVert ? seg1Origin + z.direction * d : z.centerPos;
+      if (prevD !== null) {
+        const px = isVert ? z.centerPos : seg1Origin + z.direction * (prevD + LINK_R);
+        const py = isVert ? seg1Origin + z.direction * (prevD + LINK_R) : z.centerPos;
+        const nx = isVert ? z.centerPos : seg1Origin + z.direction * (d - LINK_R);
+        const ny = isVert ? seg1Origin + z.direction * (d - LINK_R) : z.centerPos;
+        ctx.moveTo(px, py);
+        ctx.lineTo(nx, ny);
+      }
+      ctx.moveTo(cx + LINK_R, cy);
+      ctx.arc(cx, cy, LINK_R, 0, Math.PI * 2);
+      prevD = d;
+    }
+  }
+
+  // Seg2 링크 (perpendicular)
+  if (drawn2 > 0) {
+    let prevD: number | null = null;
+    for (let d = 0; d <= drawn2; d += STEP) {
+      const cx = isVert ? z.centerPos + z.turnDir * d : z.turnPoint;
+      const cy = isVert ? z.turnPoint : z.centerPos + z.turnDir * d;
+      if (prevD !== null) {
+        const px = isVert ? z.centerPos + z.turnDir * (prevD + LINK_R) : z.turnPoint;
+        const py = isVert ? z.turnPoint : z.centerPos + z.turnDir * (prevD + LINK_R);
+        const nx = isVert ? z.centerPos + z.turnDir * (d - LINK_R) : z.turnPoint;
+        const ny = isVert ? z.turnPoint : z.centerPos + z.turnDir * (d - LINK_R);
+        ctx.moveTo(px, py);
+        ctx.lineTo(nx, ny);
+      }
+      ctx.moveTo(cx + LINK_R, cy);
+      ctx.arc(cx, cy, LINK_R, 0, Math.PI * 2);
+      prevD = d;
+    }
+  }
+
+  ctx.stroke();
+}
+
 // ── 메인 렌더 ────────────────────────────────────────────────────────────────
 export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Arena]): void {
   ctx.shadowBlur = 0;
@@ -282,7 +427,11 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
       drawBand(ctx, z, arena, pulse);
 
     } else { // extending / active / exiting
-      drawChainLinks(ctx, z, arena);
+      if (z.chainType === "turn") {
+        drawTurnChainLinks(ctx, z, arena);
+      } else {
+        drawChainLinks(ctx, z, arena);
+      }
     }
 
     ctx.restore();

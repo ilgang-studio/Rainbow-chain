@@ -52,7 +52,38 @@ export function startGameLoop(
       const adjBase    = base + CHAIN_LINK_R;
       const adjMax     = base + fullLen - CHAIN_LINK_R;
 
-      // 체인 중심선 거리 판정
+      // Turn 체인: L자형 두 구간 별도 판정
+      if (chain.chainType === "turn") {
+        const drawn1 = Math.min(chain.drawLength, chain.seg1Len);
+        const drawn2 = Math.max(0, chain.drawLength - chain.seg1Len);
+
+        // Seg1: primary axis at centerPos
+        const dist1 = isVert ? Math.abs(p.x - chain.centerPos) : Math.abs(p.y - chain.centerPos);
+        if (dist1 < p.radius && drawn1 > 0) {
+          const s1Start = chain.direction === 1 ? adjBase : adjMax - drawn1;
+          const s1End   = chain.direction === 1 ? adjBase + drawn1 : adjMax;
+          const along1  = isVert ? p.y : p.x;
+          if (along1 + p.radius >= s1Start && along1 - p.radius <= s1End) {
+            isGameOver = true; deadIdx = chain.arenaIdx; return;
+          }
+        }
+
+        // Seg2: perpendicular at turnPoint
+        if (drawn2 > 0) {
+          const dist2 = isVert ? Math.abs(p.y - chain.turnPoint) : Math.abs(p.x - chain.turnPoint);
+          if (dist2 < p.radius) {
+            const s2Start = chain.turnDir === 1 ? chain.centerPos : chain.centerPos - drawn2;
+            const s2End   = chain.turnDir === 1 ? chain.centerPos + drawn2 : chain.centerPos;
+            const along2  = isVert ? p.x : p.y;
+            if (along2 + p.radius >= s2Start && along2 - p.radius <= s2End) {
+              isGameOver = true; deadIdx = chain.arenaIdx; return;
+            }
+          }
+        }
+        continue;
+      }
+
+      // 직선 체인: 중심선 거리 판정
       const dist = isVert
         ? Math.abs(p.x - chain.centerPos)
         : Math.abs(p.y - chain.centerPos);
