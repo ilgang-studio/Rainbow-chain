@@ -456,31 +456,49 @@ function drawGiantChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Aren
 
   if (chainLen <= 0) return;
 
-  const STEP = R * 3;  // 링크 간격 = 반지름 * 3 (gap ≈ R)
+  const STEP = R * 4;  // Giant는 O===O 느낌이 나도록 링크 간격을 더 길게 유지
+  const CONNECTOR_WIDTH = R * 0.75;
+  const positions: number[] = [];
 
-  // glow pass
+  if (chainLen < R * 2.2) {
+    positions.push(chainStart);
+  } else {
+    const gapCount = Math.max(1, Math.round(chainLen / STEP));
+    const actualStep = chainLen / gapCount;
+    for (let i = 0; i <= gapCount; i++) {
+      positions.push(chainStart + actualStep * i);
+    }
+  }
+
+  // glow pass — Giant도 링크 사이 구간에만 glow가 생기도록 분절해서 그림
   ctx.globalAlpha = 0.15;
   ctx.strokeStyle = cfg.linkColor;
-  ctx.lineWidth   = R * 3;
+  ctx.lineWidth   = R * 3.4;
   ctx.lineCap     = "round";
   ctx.beginPath();
-  if (isVert) {
-    ctx.moveTo(z.centerPos, chainStart - R);
-    ctx.lineTo(z.centerPos, chainStart + chainLen + R);
-  } else {
-    ctx.moveTo(chainStart - R, z.centerPos);
-    ctx.lineTo(chainStart + chainLen + R, z.centerPos);
+  let prevGlowPos: number | null = null;
+  for (const pos of positions) {
+    if (prevGlowPos !== null) {
+      if (isVert) {
+        ctx.moveTo(z.centerPos, prevGlowPos + R);
+        ctx.lineTo(z.centerPos, pos - R);
+      } else {
+        ctx.moveTo(prevGlowPos + R, z.centerPos);
+        ctx.lineTo(pos - R, z.centerPos);
+      }
+    }
+    prevGlowPos = pos;
   }
   ctx.stroke();
 
   // main pass
   ctx.globalAlpha = 1.0;
   ctx.strokeStyle = cfg.linkColor;
-  ctx.lineWidth   = 2.5;
+  ctx.lineWidth   = CONNECTOR_WIDTH;
   ctx.lineCap     = "butt";
   ctx.beginPath();
   let prevPos: number | null = null;
-  for (let pos = chainStart; pos <= chainStart + chainLen; pos += STEP) {
+  for (const pos of positions) {
     const cx = isVert ? z.centerPos : pos;
     const cy = isVert ? pos : z.centerPos;
     if (prevPos !== null) {
@@ -495,16 +513,6 @@ function drawGiantChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Aren
     ctx.moveTo(cx + R, cy);
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     prevPos = pos;
-  }
-  // 꼬리 연결선: 마지막 링크 끝 → 반대쪽 벽
-  if (prevPos !== null) {
-    if (isVert) {
-      ctx.moveTo(z.centerPos, prevPos + R);
-      ctx.lineTo(z.centerPos, chainStart + chainLen + R);
-    } else {
-      ctx.moveTo(prevPos + R, z.centerPos);
-      ctx.lineTo(chainStart + chainLen + R, z.centerPos);
-    }
   }
   ctx.stroke();
 }
