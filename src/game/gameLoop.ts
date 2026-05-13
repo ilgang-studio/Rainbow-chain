@@ -5,6 +5,7 @@ import { drawArena } from "./arena";
 import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual } from "./warning/index";
 import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
+import { createArenaAi, resetArenaAi, updateArenaAi } from "./ai";
 
 const MAX_DT = 1 / 30;
 
@@ -44,6 +45,7 @@ export function startGameLoop(
   }
 
   const items = createItems(arenas);
+  const arenaAi = createArenaAi();
 
   function resetGame(): void {
     for (let i = 0; i < 2; i++) {
@@ -54,6 +56,7 @@ export function startGameLoop(
     }
     resetWarnings();
     resetItems(items, arenas);
+    resetArenaAi(arenaAi);
     isGameOver = false;
     deadIdx    = null;
     gameTime   = 0;
@@ -218,7 +221,11 @@ export function startGameLoop(
 
       // ── 플레이어 이동 ──────────────────────
       updatePlayer(players[0], dt, arenas[0]);
-      updatePlayer(players[1], dt, arenas[1]);
+      const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], items[1]);
+      if (aiUseChain && players[1].hasChain) {
+        players[1].hasChain = false;
+        fireChain(0, arenas, players[1].chainType);
+      }
 
       // ── 충돌 판정 ──────────────────────────
       checkCollisions();
