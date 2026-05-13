@@ -16,6 +16,12 @@ interface DangerInfo {
   awayY: number;
 }
 
+interface BodyPoint {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export interface ArenaAi {
   observeTimer: number;
   observeDelay: number;
@@ -69,6 +75,14 @@ function pointToSegmentDistance(
 
 function createNoDanger(): DangerInfo {
   return { score: 0, awayX: 0, awayY: 0 };
+}
+
+function addDanger(sum: DangerInfo, danger: DangerInfo): DangerInfo {
+  if (danger.score <= 0) return sum;
+  sum.score += danger.score;
+  sum.awayX += danger.awayX * danger.score;
+  sum.awayY += danger.awayY * danger.score;
+  return sum;
 }
 
 function accumulateDanger(best: DangerInfo, dist: number, nx: number, ny: number, radius: number, urgency: number): DangerInfo {
@@ -148,7 +162,7 @@ function getTrackingDanger(px: number, py: number, z: Zone): DangerInfo {
   return best;
 }
 
-function getZoneDanger(player: Player, arena: Arena, z: Zone): DangerInfo {
+function getZoneDanger(player: BodyPoint, arena: Arena, z: Zone): DangerInfo {
   const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
   const px = player.x;
   const py = player.y;
@@ -192,14 +206,110 @@ function getZoneDanger(player: Player, arena: Arena, z: Zone): DangerInfo {
   return accumulateDanger(createNoDanger(), hit.dist, hit.nx, hit.ny, dangerRadius, z.phase === "active" ? 1.2 : 1.0);
 }
 
-function senseDanger(player: Player, arena: Arena): DangerInfo {
-  let best = createNoDanger();
+function getWallDanger(player: BodyPoint, arena: Arena): DangerInfo {
+  const pad = 74;
+  const danger = createNoDanger();
+  addDanger(
+    danger,
+    accumulateDanger(createNoDanger(), player.x - arena.x, 1, 0, pad + player.radius, 0.52),
+  );
+  addDanger(
+    danger,
+    accumulateDanger(createNoDanger(), arena.x + arena.w - player.x, -1, 0, pad + player.radius, 0.52),
+  );
+  addDanger(
+    danger,
+    accumulateDanger(createNoDanger(), player.y - arena.y, 0, 1, pad + player.radius, 0.44),
+  );
+  addDanger(
+    danger,
+    accumulateDanger(createNoDanger(), arena.y + arena.h - player.y, 0, -1, pad + player.radius, 0.44),
+  );
+  return danger;
+}
+
+function senseDanger(player: BodyPoint, arena: Arena): DangerInfo {
+  const total = createNoDanger();
   for (const z of zones) {
     if (z.arenaIdx !== 1) continue;
     const danger = getZoneDanger(player, arena, z);
-    if (danger.score > best.score) best = danger;
+    addDanger(total, danger);
   }
-  return best;
+
+  addDanger(total, getWallDanger(player, arena));
+
+  if (total.score <= 0.0001) return createNoDanger();
+  const away = normalize(total.awayX, total.awayY);
+  return {
+    score: total.score,
+    awayX: away.x,
+    awayY: away.y,
+  };
+}
+
+function clampToArena(point: BodyPoint, arena: Arena): BodyPoint {
+  return {
+    x: Math.max(arena.x + point.radius, Math.min(arena.x + arena.w - point.radius, point.x)),
+    y: Math.max(arena.y + point.radius, Math.min(arena.y + arena.h - point.radius, point.y)),
+    radius: point.radius,
+  };
+}
+
+function scoreCandidateMove(
+  ai: ArenaAi,
+  player: Player,
+  enemy: Player,
+  arena: Arena,
+  item: Item,
+  dirX: number,
+  dirY: number,
+): number {
+  const move = normalize(dirX, dirY);
+  const lookahead = [0.18, 0.34, 0.56, 0.82];
+  const weights = [1.35, 1.1, 0.82, 0.55];
+  let score = 0;
+
+  for (let i = 0; i < lookahead.length; i++) {
+    const t = lookahead[i];
+    const projected = clampToArena({
+      x: player.x + move.x * player.speed * 0.88 * t,
+      y: player.y + move.y * player.speed * 0.88 * t,
+      radius: player.radius,
+    }, arena);
+    const danger = senseDanger(projected, arena);
+    score -= danger.score * weights[i];
+  }
+
+  const centerX = arena.x + arena.w * 0.5;
+  const centerY = arena.y + arena.h * 0.5;
+  const centerDist = Math.hypot(player.x - centerX, player.y - centerY);
+  const projectedCenterDist = Math.hypot(
+    player.x + move.x * player.speed * 0.28 - centerX,
+    player.y + move.y * player.speed * 0.28 - centerY,
+  );
+  score += (centerDist - projectedCenterDist) * 0.0024;
+
+  if (!player.hasChain && item.active) {
+    const itemDistNow = Math.hypot(item.x - player.x, item.y - player.y);
+    const projectedItemDist = Math.hypot(
+      item.x - (player.x + move.x * player.speed * 0.34),
+      item.y - (player.y + move.y * player.speed * 0.34),
+    );
+    score += (itemDistNow - projectedItemDist) * 0.012;
+  } else {
+    const shadowX = enemy.x - enemy.radius * 0.45;
+    const shadowY = enemy.y;
+    const enemyDistNow = Math.hypot(shadowX - player.x, shadowY - player.y);
+    const enemyDistLater = Math.hypot(
+      shadowX - (player.x + move.x * player.speed * 0.25),
+      shadowY - (player.y + move.y * player.speed * 0.25),
+    );
+    score += (enemyDistNow - enemyDistLater) * 0.0016;
+  }
+
+  score += (Math.cos(ai.driftAngle) * move.x + Math.sin(ai.driftAngle) * move.y) * 0.06;
+  score += randRange(-0.045, 0.045);
+  return score;
 }
 
 function chooseObservedMove(
@@ -210,43 +320,54 @@ function chooseObservedMove(
   item: Item,
 ): { x: number; y: number } {
   const danger = senseDanger(player, arena);
-  if (danger.score > 0.18) {
-    const tangentSign = Math.random() < 0.5 ? -1 : 1;
-    const tangentX = -danger.awayY * tangentSign;
-    const tangentY = danger.awayX * tangentSign;
-    const escape = normalize(
-      danger.awayX * (1.1 + danger.score) + tangentX * 0.45,
-      danger.awayY * (1.1 + danger.score) + tangentY * 0.45,
-    );
-    return escape;
+  const candidates: Array<{ x: number; y: number }> = [];
+
+  if (danger.score > 0.12) {
+    candidates.push({ x: danger.awayX, y: danger.awayY });
+    candidates.push({ x: -danger.awayY, y: danger.awayX });
+    candidates.push({ x: danger.awayY, y: -danger.awayX });
   }
 
   if (!player.hasChain && item.active) {
-    const toItem = normalize(item.x - player.x, item.y - player.y);
-    return normalize(
-      toItem.x + Math.cos(ai.driftAngle) * 0.18,
-      toItem.y + Math.sin(ai.driftAngle) * 0.18,
-    );
+    candidates.push(normalize(item.x - player.x, item.y - player.y));
   }
 
   const centerX = arena.x + arena.w * 0.5;
   const centerY = arena.y + arena.h * 0.5;
-  const toCenter = normalize(centerX - player.x, centerY - player.y);
-  const toEnemy = normalize(enemy.x - enemy.radius - centerX, enemy.y - centerY);
-  return normalize(
-    toCenter.x * 0.65 + toEnemy.x * 0.25 + Math.cos(ai.driftAngle) * 0.3,
-    toCenter.y * 0.65 + toEnemy.y * 0.25 + Math.sin(ai.driftAngle) * 0.3,
-  );
+  candidates.push(normalize(centerX - player.x, centerY - player.y));
+  candidates.push(normalize(enemy.x - player.x, enemy.y - player.y));
+  candidates.push({ x: ai.moveX, y: ai.moveY });
+
+  const slices = 12;
+  for (let i = 0; i < slices; i++) {
+    const angle = (Math.PI * 2 * i) / slices;
+    candidates.push({ x: Math.cos(angle), y: Math.sin(angle) });
+  }
+
+  let bestMove = normalize(centerX - player.x, centerY - player.y);
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const move = normalize(candidate.x, candidate.y);
+    if (Math.abs(move.x) <= 0.0001 && Math.abs(move.y) <= 0.0001) continue;
+    const score = scoreCandidateMove(ai, player, enemy, arena, item, move.x, move.y);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
 }
 
 export function createArenaAi(): ArenaAi {
   return {
     observeTimer: 0,
-    observeDelay: randRange(0.2, 0.4),
+    observeDelay: randRange(0.18, 0.34),
     moveX: 0,
     moveY: 0,
     useTimer: 0,
-    useDelay: randRange(0.75, 1.45),
+    useDelay: randRange(0.65, 1.2),
     mistakeTimer: randRange(1.0, 2.2),
     mistakeX: 0,
     mistakeY: 0,
@@ -257,11 +378,11 @@ export function createArenaAi(): ArenaAi {
 
 export function resetArenaAi(ai: ArenaAi): void {
   ai.observeTimer = 0;
-  ai.observeDelay = randRange(0.2, 0.4);
+  ai.observeDelay = randRange(0.18, 0.34);
   ai.moveX = 0;
   ai.moveY = 0;
   ai.useTimer = 0;
-  ai.useDelay = randRange(0.75, 1.45);
+  ai.useDelay = randRange(0.65, 1.2);
   ai.mistakeTimer = randRange(1.0, 2.2);
   ai.mistakeX = 0;
   ai.mistakeY = 0;
@@ -292,7 +413,7 @@ export function updateArenaAi(
     const nextMove = chooseObservedMove(ai, player, enemy, arena, item);
     ai.moveX = nextMove.x;
     ai.moveY = nextMove.y;
-    ai.observeDelay = randRange(0.2, 0.4);
+    ai.observeDelay = randRange(0.18, 0.34);
     ai.observeTimer = ai.observeDelay;
   }
 
@@ -301,15 +422,15 @@ export function updateArenaAi(
   if (Math.random() < 0.02) {
     moveX *= 0.2;
     moveY *= 0.2;
-  } else if (Math.random() < 0.08) {
-    moveX += ai.mistakeX * 0.55;
-    moveY += ai.mistakeY * 0.55;
+  } else if (Math.random() < 0.06) {
+    moveX += ai.mistakeX * 0.42;
+    moveY += ai.mistakeY * 0.42;
     const corrected = normalize(moveX, moveY);
     moveX = corrected.x;
     moveY = corrected.y;
   }
 
-  const dist = player.speed * 0.88 * dt;
+  const dist = player.speed * 0.9 * dt;
   player.x += moveX * dist;
   player.y += moveY * dist;
   player.x = Math.max(arena.x + player.radius, Math.min(arena.x + arena.w - player.radius, player.x));
@@ -317,7 +438,7 @@ export function updateArenaAi(
 
   if (player.hasChain && !ai.lastHasChain) {
     ai.useTimer = 0;
-    ai.useDelay = randRange(0.8, 1.6);
+    ai.useDelay = randRange(0.6, 1.15);
   }
   ai.lastHasChain = player.hasChain;
 
@@ -325,9 +446,11 @@ export function updateArenaAi(
 
   ai.useTimer += dt;
   if (ai.useTimer < ai.useDelay) return false;
-  if (Math.random() < 0.12) {
+  const currentDanger = senseDanger(player, arena);
+  const enemyBias = Math.abs(enemy.y - player.y) < arena.h * 0.2 || Math.abs(enemy.x - player.x) < arena.w * 0.2;
+  if (currentDanger.score < 0.9 && (enemyBias || Math.random() < 0.22)) {
     ai.useTimer = 0;
-    ai.useDelay = randRange(0.8, 1.6);
+    ai.useDelay = randRange(0.75, 1.3);
     ai.lastHasChain = false;
     return true;
   }

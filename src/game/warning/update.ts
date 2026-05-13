@@ -16,12 +16,12 @@ import {
 import { zones, spawnTimers } from "./state";
 
 function currentSpawnInterval(gameTime: number): number {
-  return Math.max(0.8, 4.0 - gameTime * 0.06);
+  return Math.max(1.15, 4.8 - gameTime * 0.02);
 }
 
 function spawnCount(gameTime: number): number {
-  if (gameTime >= 90) return 3;
-  if (gameTime >= 45) return 2;
+  if (gameTime >= 165) return 3;
+  if (gameTime >= 95) return 2;
   return 1;
 }
 
@@ -112,7 +112,8 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounte
     trackTurnAngle,
     trackTurned,
     trackPoints,
-    mirrorRemaining: encounter?.modifiers.mirrorBounceCount ?? 0,
+    speedMultiplier: encounter?.modifiers.chainLaunchSpeedMultiplier ?? 1,
+    mirrorRemaining: 0,
     mirrorTurnUp: false,
     mirrorTurnX: 0,
     mirrorTurnLength: 0,
@@ -123,14 +124,45 @@ function canMirrorBounce(z: Zone): boolean {
   return z.chainType === "normal" || z.chainType === "rush";
 }
 
-function updateTrackingZone(z: Zone, target: Player): void {
+function getTrackingBoundaryDistance(
+  x: number,
+  y: number,
+  dirX: number,
+  dirY: number,
+  arena: Arena,
+  inset: number,
+): number {
+  const minX = arena.x + inset;
+  const maxX = arena.x + arena.w - inset;
+  const minY = arena.y + inset;
+  const maxY = arena.y + arena.h - inset;
+  let best = Number.POSITIVE_INFINITY;
+
+  if (Math.abs(dirX) > 0.0001) {
+    const tx = dirX > 0 ? (maxX - x) / dirX : (minX - x) / dirX;
+    if (tx > 0) best = Math.min(best, tx);
+  }
+
+  if (Math.abs(dirY) > 0.0001) {
+    const ty = dirY > 0 ? (maxY - y) / dirY : (minY - y) / dirY;
+    if (ty > 0) best = Math.min(best, ty);
+  }
+
+  return Number.isFinite(best) ? best : 0;
+}
+
+function updateTrackingZone(z: Zone, target: Player, arena: Arena): boolean {
   const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
   const trackingStrength = cfg.trackingStrength ?? 0.16;
   const maxTurnRate = cfg.maxTurnRate ?? 0.9;
-  const speed = cfg.speed ?? 260;
-  const totalLen = speed * (cfg.lifetime ?? cfg.activeDuration);
-  const visibleLen = Math.min(totalLen, speed * z.elapsed);
-  const bendLen = totalLen * 0.24;
+  const speed = (cfg.speed ?? 260) * z.speedMultiplier;
+  const trackHalfWidth = (cfg.chainWidth ?? 16) * 0.5;
+  const primarySpan = (z.orientation === "vertical" ? arena.h : arena.w) - trackHalfWidth * 2;
+  const bendLen = Math.max(trackHalfWidth * 3, primarySpan * 0.24);
+  const visibleLen = speed * z.elapsed;
+
+  const bendX = z.trackStartX + Math.cos(z.trackBaseAngle) * bendLen;
+  const bendY = z.trackStartY + Math.sin(z.trackBaseAngle) * bendLen;
 
   z.trackPoints.length = 0;
   z.trackPoints.push({ x: z.trackStartX, y: z.trackStartY });
@@ -141,11 +173,9 @@ function updateTrackingZone(z: Zone, target: Player): void {
     z.trackDirX = Math.cos(z.trackBaseAngle);
     z.trackDirY = Math.sin(z.trackBaseAngle);
     z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
-    return;
+    return false;
   }
 
-  const bendX = z.trackStartX + Math.cos(z.trackBaseAngle) * bendLen;
-  const bendY = z.trackStartY + Math.sin(z.trackBaseAngle) * bendLen;
   if (!z.trackTurned) {
     const targetAngle = Math.atan2(target.y - bendY, target.x - bendX);
     const turnDelta = clamp(
@@ -157,7 +187,17 @@ function updateTrackingZone(z: Zone, target: Player): void {
     z.trackTurned = true;
   }
 
-  const secondLen = visibleLen - bendLen;
+  const maxSecondLen = getTrackingBoundaryDistance(
+    bendX,
+    bendY,
+    Math.cos(z.trackTurnAngle),
+    Math.sin(z.trackTurnAngle),
+    arena,
+    trackHalfWidth,
+  );
+  const totalLen = bendLen + maxSecondLen;
+  const clampedVisibleLen = Math.min(totalLen, speed * z.elapsed);
+  const secondLen = Math.max(0, clampedVisibleLen - bendLen);
   z.trackDirX = Math.cos(z.trackTurnAngle);
   z.trackDirY = Math.sin(z.trackTurnAngle);
   z.trackHeadX = bendX + z.trackDirX * secondLen;
@@ -165,6 +205,7 @@ function updateTrackingZone(z: Zone, target: Player): void {
 
   z.trackPoints.push({ x: bendX, y: bendY });
   z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
+  return speed * z.elapsed >= totalLen;
 }
 
 export function updateWarnings(
@@ -172,7 +213,7 @@ export function updateWarnings(
   arenas: [Arena, Arena],
   players: [Player, Player],
   gameTime: number,
-  options?: { practiceMode?: boolean },
+  options?: { practiceMode?: boolean; onChainLaunch?: () => void },
   encounter?: EncounterConfig,
 ): void {
   const practiceMode = options?.practiceMode ?? false;
@@ -213,19 +254,29 @@ export function updateWarnings(
       }
     } else if (z.phase === "flash") {
       if (z.elapsed >= FLASH_DURATION) {
-        z.phase = z.chainType === "tracking" ? "active" : "extending";
+        options?.onChainLaunch?.();
+        z.phase = "extending";
         z.elapsed = 0;
         z.drawLength = 0;
       }
     } else if (z.phase === "extending") {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
+      if (z.chainType === "tracking") {
+        const reachedWall = updateTrackingZone(z, players[z.arenaIdx], arenas[z.arenaIdx]);
+        if (reachedWall) {
+          z.phase = "active";
+          z.elapsed = 0;
+        }
+        continue;
+      }
       const arena = arenas[z.arenaIdx];
       const lkR = cfg.linkRadius ?? LINK_R;
       const maxLen = z.chainType === "turn"
         ? z.seg1Len + z.seg2Len
         : (z.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
-      z.drawLength = Math.min(maxLen, maxLen * (z.elapsed / cfg.extendDuration));
-      if (z.elapsed >= cfg.extendDuration) {
+      const extendDuration = cfg.extendDuration / z.speedMultiplier;
+      z.drawLength = Math.min(maxLen, maxLen * (z.elapsed / extendDuration));
+      if (z.elapsed >= extendDuration) {
         if (z.mirrorRemaining > 0 && canMirrorBounce(z) && z.orientation === "horizontal") {
           z.mirrorRemaining--;
           z.phase = "active";
@@ -243,8 +294,11 @@ export function updateWarnings(
     } else if (z.phase === "active") {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
       if (z.chainType === "tracking") {
-        updateTrackingZone(z, players[z.arenaIdx]);
-        if (z.elapsed >= (cfg.lifetime ?? cfg.activeDuration)) zones.splice(i, 1);
+        if (z.elapsed >= cfg.activeDuration) {
+          z.phase = "exiting";
+          z.elapsed = 0;
+          z.exitOffset = 0;
+        }
       } else if (z.mirrorTurnUp) {
         if (z.elapsed >= cfg.activeDuration) zones.splice(i, 1);
       } else if (z.elapsed >= cfg.activeDuration) {
@@ -254,7 +308,9 @@ export function updateWarnings(
       }
     } else {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
-      if (z.chainType === "turn") {
+      if (z.chainType === "tracking") {
+        if (z.elapsed >= cfg.exitDuration) zones.splice(i, 1);
+      } else if (z.chainType === "turn") {
         if (z.elapsed >= cfg.exitDuration) zones.splice(i, 1);
       } else {
         const arena = arenas[z.arenaIdx];

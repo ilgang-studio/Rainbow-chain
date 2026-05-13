@@ -1,5 +1,6 @@
 import { isKeyDown } from "./input";
 import type { Arena } from "./arena";
+import type { ControlSettings } from "../settings";
 
 export interface Player {
   x: number;
@@ -19,7 +20,7 @@ export interface Player {
 }
 
 // 각 플레이어를 자신의 아레나 중앙에 배치
-export function createPlayers(arenas: [Arena, Arena]): [Player, Player] {
+export function createPlayers(arenas: [Arena, Arena], controls?: ControlSettings): [Player, Player] {
   const [a1, a2] = arenas;
 
   const player1: Player = {
@@ -28,10 +29,15 @@ export function createPlayers(arenas: [Arena, Arena]): [Player, Player] {
     radius: 16,
     speed: 300,
     color: "#ffffff",
-    keys: { up: "w", down: "s", left: "a", right: "d" },
+    keys: {
+      up: controls?.up ?? "w",
+      down: controls?.down ?? "s",
+      left: controls?.left ?? "a",
+      right: controls?.right ?? "d",
+    },
     hasChain:  false,
     chainType: "normal",
-    useKey: " ",      // Space
+    useKey: controls?.use ?? " ",      // Space
   };
 
   const player2: Player = {

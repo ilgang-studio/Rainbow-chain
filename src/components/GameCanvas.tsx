@@ -1,16 +1,41 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initInput } from "../game/input";
 import { createArenas } from "../game/arena";
 import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
+import type { AppSettings } from "../settings";
+import chainSfxTrack from "../assets/Metal-chain.mp3";
 
-type GameMode = "casual" | "practice";
+type GameMode = "casual" | "practice" | "double";
 
-export default function GameCanvas({ mode = "casual" }: { mode?: GameMode }) {
+export default function GameCanvas({
+  mode = "casual",
+  settings,
+  onExit,
+}: {
+  mode?: GameMode;
+  settings?: AppSettings;
+  onExit?: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chainAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [gameOver, setGameOver] = useState(false);
+  const [runId, setRunId] = useState(0);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+    if (!chainAudioRef.current) {
+      chainAudioRef.current = new Audio(chainSfxTrack);
+      chainAudioRef.current.preload = "auto";
+    }
+
+    const playChainSfx = () => {
+      const volume = Math.max(0, Math.min(1, (settings?.sfxVolume ?? 82) / 100)) * 0.58;
+      if (volume <= 0.001 || !chainAudioRef.current) return;
+      const clip = chainAudioRef.current.cloneNode(true) as HTMLAudioElement;
+      clip.volume = volume;
+      void clip.play().catch(() => {});
+    };
 
     const resize = () => {
       canvas.width  = window.innerWidth;
@@ -22,32 +47,102 @@ export default function GameCanvas({ mode = "casual" }: { mode?: GameMode }) {
     // 초기화 순서: input → arenas → players → gameLoop
     const cleanupInput = initInput();
     const arenas  = createArenas(canvas.width, canvas.height, mode);
-    const players = createPlayers(arenas);
+    const players = createPlayers(
+      arenas,
+      mode === "double"
+        ? {
+            up: "w",
+            down: "s",
+            left: "a",
+            right: "d",
+            use: "q",
+          }
+        : settings?.controls,
+    );
+    if (mode === "double") {
+      players[1].useKey = "/";
+    }
     const cleanupLoop = startGameLoop(canvas, players, arenas, {
-      enableAi: mode !== "practice",
+      enableAi: mode === "casual",
       practiceMode: mode === "practice",
-    });
+      onChainLaunch: playChainSfx,
+    }, setGameOver);
 
     return () => {
       window.removeEventListener("resize", resize);
       cleanupInput();
       cleanupLoop();
     };
-  }, [mode]);
+  }, [mode, settings, runId]);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
       style={{
-        display: "block",
-        background: "#000",
         position: "fixed",
-        top: 0,
-        left: 0,
-        // CSS 크기를 명시적으로 지정 (canvas 기본값 300×150 방지)
-        width: "100vw",
-        height: "100vh",
+        inset: 0,
       }}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        style={{
+          display: "block",
+          background: "#000",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+        }}
+      />
+      {gameOver ? (
+        <div
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "14vh",
+            transform: "translateX(-50%)",
+            display: "flex",
+            gap: "16px",
+            zIndex: 20,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setGameOver(false);
+              setRunId((value) => value + 1);
+            }}
+            style={{
+              minWidth: "176px",
+              padding: "14px 18px",
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: "rgba(0,0,0,0.86)",
+              color: "#fff",
+              font: '700 18px/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif',
+              cursor: "pointer",
+              boxShadow: "0 0 16px rgba(255,255,255,0.12)",
+            }}
+          >
+            Restart
+          </button>
+          <button
+            type="button"
+            onClick={() => onExit?.()}
+            style={{
+              minWidth: "176px",
+              padding: "14px 18px",
+              border: "1px solid rgba(255,255,255,0.55)",
+              background: "rgba(0,0,0,0.86)",
+              color: "#fff",
+              font: '700 18px/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif',
+              cursor: "pointer",
+              boxShadow: "0 0 16px rgba(255,255,255,0.12)",
+            }}
+          >
+            Main Menu
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

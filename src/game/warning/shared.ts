@@ -24,9 +24,9 @@ export interface ChainConfig {
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
   normal: {
-    extendDuration: 0.45,
+    extendDuration: 0.58,
     activeDuration: 1.8,
-    exitDuration:   0.45,
+    exitDuration:   0.58,
     warningColor:   "#999999",
     linkColor:      "#c8c8c8",
   },
@@ -38,46 +38,46 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     linkColor:      "#ff5533",
   },
   turn: {
-    extendDuration: 0.55,
+    extendDuration: 0.72,
     activeDuration: 1.6,
-    exitDuration:   0.55,
+    exitDuration:   0.72,
     warningColor:   "#ffcc00",
     linkColor:      "#ffee44",
   },
   fake: {
-    extendDuration:  0.55,
+    extendDuration:  0.72,
     activeDuration:  1.8,
-    exitDuration:    0.45,
+    exitDuration:    0.58,
     warningColor:    "#cc44ff",
     linkColor:       "#dd77ff",
     warningDuration: 2.6,
   },
   giant: {
-    extendDuration: 0.80,
+    extendDuration: 1.05,
     activeDuration: 2.5,
-    exitDuration:   0.60,
+    exitDuration:   0.80,
     warningColor:   "#2266ff",
     linkColor:      "#4499ff",
     linkRadius:     9,
     bandHalfWidth:  54,
   },
   tracking: {
-    extendDuration:   0.01,
+    extendDuration:   0.55,
     activeDuration:   2.8,
-    exitDuration:     0.01,
+    exitDuration:     1.05,
     warningDuration:  1.4,
     warningColor:     "#00cc66",
     linkColor:        "#44ff99",
     trackingStrength: 0.78,
     maxTurnRate:      1.05,
-    speed:            260,
+    speed:            210,
     chainWidth:       16,
-    lifetime:         2.8,
+    lifetime:         6.0,
   },
   phase: {
-    extendDuration:        0.45,
+    extendDuration:        0.60,
     activeDuration:        2.8,
-    exitDuration:          0.45,
+    exitDuration:          0.60,
     warningColor:          "#ff9a1f",
     linkColor:             "#ffb347",
     phaseVisibleDuration:  0.7,
@@ -114,6 +114,7 @@ export interface Zone {
   trackTurnAngle: number;
   trackTurned: boolean;
   trackPoints: TrackPoint[];
+  speedMultiplier: number;
   mirrorRemaining: number;
   mirrorTurnUp: boolean;
   mirrorTurnX: number;

@@ -480,9 +480,12 @@ function drawTrackingChain(ctx: CanvasRenderingContext2D, z: Zone): void {
   const ringRadius = width * 0.36;
   const points = sampleTrackingPoints(z.trackPoints, Math.max(11, ringRadius * 2.4));
   if (points.length === 0) return;
+  const fadeAlpha = z.phase === "exiting"
+    ? Math.max(0, 1 - z.elapsed / cfg.exitDuration)
+    : 1;
 
   if (points.length > 1) {
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.16 * fadeAlpha;
     ctx.strokeStyle = cfg.linkColor;
     ctx.lineWidth = width * 1.15;
     ctx.lineCap = "round";
@@ -502,7 +505,7 @@ function drawTrackingChain(ctx: CanvasRenderingContext2D, z: Zone): void {
     ctx.stroke();
   }
 
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = fadeAlpha;
   ctx.strokeStyle = cfg.linkColor;
   ctx.lineWidth = connectorWidth;
   ctx.lineCap = "round";

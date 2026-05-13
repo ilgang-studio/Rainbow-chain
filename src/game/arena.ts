@@ -8,7 +8,7 @@ export interface Arena {
 }
 
 // 두 아레나를 캔버스 중앙에 나란히 배치
-export function createArenas(cw: number, ch: number, mode: "casual" | "practice" = "casual"): [Arena, Arena] {
+export function createArenas(cw: number, ch: number, mode: "casual" | "practice" | "double" = "casual"): [Arena, Arena] {
   if (mode === "practice") {
     const size = Math.min(cw * 0.6, ch * 0.76);
     const x = (cw - size) / 2;

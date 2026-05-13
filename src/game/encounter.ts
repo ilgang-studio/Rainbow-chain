@@ -2,11 +2,11 @@ export interface EncounterModifiers {
   chainSpawnIntervalMultiplier?: number;
   chainSpawnCountBonus?: number;
   itemRespawnRateMultiplier?: number;
-  mirrorBounceCount?: number;
+  chainLaunchSpeedMultiplier?: number;
 }
 
 export interface EncounterConfig {
-  id: "chainRush" | "itemFever" | "mirrorArena";
+  id: "chainStorm" | "itemFever" | "overclock";
   name: string;
   description: string;
   modifiers: EncounterModifiers;
@@ -14,9 +14,9 @@ export interface EncounterConfig {
 
 export const ENCOUNTERS: EncounterConfig[] = [
   {
-    id: "chainRush",
-    name: "Chain Rush",
-    description: "Chains spawn faster and stack up sooner.",
+    id: "chainStorm",
+    name: "Chain Storm",
+    description: "Chains are produced faster across the arena.",
     modifiers: {
       chainSpawnIntervalMultiplier: 0.68,
       chainSpawnCountBonus: 1,
@@ -25,17 +25,17 @@ export const ENCOUNTERS: EncounterConfig[] = [
   {
     id: "itemFever",
     name: "Item Fever",
-    description: "Items respawn rapidly for nonstop pickups.",
+    description: "Items spawn more often for nonstop pickups.",
     modifiers: {
       itemRespawnRateMultiplier: 2.15,
     },
   },
   {
-    id: "mirrorArena",
-    name: "Mirror Arena",
-    description: "Most straight chains bounce once off the far wall.",
+    id: "overclock",
+    name: "Overclock",
+    description: "Chains launch faster once the warning ends.",
     modifiers: {
-      mirrorBounceCount: 1,
+      chainLaunchSpeedMultiplier: 1.4,
     },
   },
 ];
