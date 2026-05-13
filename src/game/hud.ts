@@ -1,6 +1,6 @@
 // HUD 렌더링 — FPS, 타이머, 게임오버 오버레이, 체인 보유 링
 import type { Player } from "./player";
-import { CHAIN_CONFIGS } from "./warning";
+import { CHAIN_CONFIGS } from "./warning/index";
 
 export function drawFPS(ctx: CanvasRenderingContext2D, fps: number): void {
   ctx.save();

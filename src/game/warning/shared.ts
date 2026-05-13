@@ -17,6 +17,9 @@ export interface ChainConfig {
   speed?:            number; // Tracking 체인 헤드 이동 속도
   chainWidth?:       number; // Tracking 체인 몸통 두께
   lifetime?:         number; // Tracking 체인 생존 시간
+  phaseVisibleDuration?: number; // Phase 체인 실체화 시간
+  phaseHiddenDuration?:  number; // Phase 체인 비실체화 시간
+  phaseFadeDuration?:    number; // Phase 체인 전환 페이드 시간
 }
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
@@ -71,6 +74,16 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     chainWidth:       16,
     lifetime:         2.8,
   },
+  phase: {
+    extendDuration:        0.45,
+    activeDuration:        2.8,
+    exitDuration:          0.45,
+    warningColor:          "#ff9a1f",
+    linkColor:             "#ffb347",
+    phaseVisibleDuration:  0.7,
+    phaseHiddenDuration:   0.5,
+    phaseFadeDuration:     0.12,
+  },
 };
 
 export const CHAIN_TYPE_IDS = Object.keys(CHAIN_CONFIGS);
@@ -118,4 +131,44 @@ export function normalizeAngle(angle: number): number {
   while (angle > Math.PI) angle -= Math.PI * 2;
   while (angle < -Math.PI) angle += Math.PI * 2;
   return angle;
+}
+
+export interface PhaseCycleVisual {
+  solid: boolean;
+  linkAlpha: number;
+  glowAlpha: number;
+}
+
+export function getPhaseCycleVisual(elapsed: number, cfg: ChainConfig): PhaseCycleVisual {
+  const visibleDur = cfg.phaseVisibleDuration ?? 0.7;
+  const hiddenDur = cfg.phaseHiddenDuration ?? 0.5;
+  const fadeDur = Math.min(cfg.phaseFadeDuration ?? 0.12, visibleDur * 0.5, hiddenDur * 0.5);
+  const cycleDur = visibleDur + hiddenDur;
+  const cycleT = cycleDur > 0 ? elapsed % cycleDur : 0;
+  const hiddenAlpha = 0.22;
+  const hiddenGlow = 0.04;
+
+  if (cycleT < visibleDur - fadeDur) {
+    return { solid: true, linkAlpha: 1, glowAlpha: 1 };
+  }
+
+  if (cycleT < visibleDur) {
+    const t = (cycleT - (visibleDur - fadeDur)) / fadeDur;
+    return {
+      solid: true,
+      linkAlpha: 1 + (hiddenAlpha - 1) * t,
+      glowAlpha: 1 + (hiddenGlow - 1) * t,
+    };
+  }
+
+  if (cycleT < visibleDur + hiddenDur - fadeDur) {
+    return { solid: false, linkAlpha: hiddenAlpha, glowAlpha: hiddenGlow };
+  }
+
+  const t = (cycleT - (visibleDur + hiddenDur - fadeDur)) / fadeDur;
+  return {
+    solid: false,
+    linkAlpha: hiddenAlpha + (1 - hiddenAlpha) * t,
+    glowAlpha: hiddenGlow + (1 - hiddenGlow) * t,
+  };
 }

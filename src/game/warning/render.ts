@@ -5,6 +5,7 @@ import {
   FLASH_DURATION,
   LINK_R,
   WARNING_DURATION,
+  getPhaseCycleVisual,
   type TrackPoint,
   type Zone,
 } from "./shared";
@@ -188,6 +189,82 @@ function drawChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): v
   ctx.stroke();
 
   ctx.globalAlpha = 1;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "butt";
+  ctx.beginPath();
+  let prevPos: number | null = null;
+  for (let pos = chainStart; pos <= chainStart + chainLen; pos += step) {
+    const cx = isVert ? z.centerPos : pos;
+    const cy = isVert ? pos : z.centerPos;
+    if (prevPos !== null) {
+      if (isVert) {
+        ctx.moveTo(z.centerPos, prevPos + LINK_R);
+        ctx.lineTo(z.centerPos, cy - LINK_R);
+      } else {
+        ctx.moveTo(prevPos + LINK_R, z.centerPos);
+        ctx.lineTo(cx - LINK_R, z.centerPos);
+      }
+    }
+    ctx.moveTo(cx + LINK_R, cy);
+    ctx.arc(cx, cy, LINK_R, 0, Math.PI * 2);
+    prevPos = pos;
+  }
+
+  if (prevPos !== null) {
+    if (isVert) {
+      ctx.moveTo(z.centerPos, prevPos + LINK_R);
+      ctx.lineTo(z.centerPos, chainStart + chainLen + LINK_R);
+    } else {
+      ctx.moveTo(prevPos + LINK_R, z.centerPos);
+      ctx.lineTo(chainStart + chainLen + LINK_R, z.centerPos);
+    }
+  }
+  ctx.stroke();
+}
+
+function drawPhaseChainLinks(ctx: CanvasRenderingContext2D, z: Zone, arena: Arena): void {
+  const isVert = z.orientation === "vertical";
+  const fullLen = isVert ? arena.h : arena.w;
+  const base = isVert ? arena.y : arena.x;
+  const adjBase = base + LINK_R;
+  const adjFullLen = fullLen - 2 * LINK_R;
+
+  let chainStart: number;
+  let chainLen: number;
+
+  if (z.phase === "extending") {
+    chainLen = z.drawLength;
+    chainStart = z.direction === 1 ? adjBase : adjBase + adjFullLen - chainLen;
+  } else if (z.phase === "active") {
+    chainLen = adjFullLen;
+    chainStart = adjBase;
+  } else {
+    chainLen = adjFullLen;
+    chainStart = z.direction === 1 ? adjBase + z.exitOffset : adjBase - z.exitOffset;
+  }
+
+  if (chainLen <= 0) return;
+
+  const step = 13;
+  const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal;
+  const phaseVisual = getPhaseCycleVisual(z.elapsed, cfg);
+
+  ctx.globalAlpha = 0.18 * phaseVisual.glowAlpha;
+  ctx.strokeStyle = cfg.linkColor;
+  ctx.lineWidth = LINK_R * 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  if (isVert) {
+    ctx.moveTo(z.centerPos, chainStart - LINK_R);
+    ctx.lineTo(z.centerPos, chainStart + chainLen + LINK_R);
+  } else {
+    ctx.moveTo(chainStart - LINK_R, z.centerPos);
+    ctx.lineTo(chainStart + chainLen + LINK_R, z.centerPos);
+  }
+  ctx.stroke();
+
+  ctx.globalAlpha = phaseVisual.linkAlpha;
   ctx.strokeStyle = cfg.linkColor;
   ctx.lineWidth = 1.5;
   ctx.lineCap = "butt";
@@ -480,6 +557,7 @@ export function drawWarnings(ctx: CanvasRenderingContext2D, arenas: [Arena, Aren
     } else {
       if (z.chainType === "turn") drawTurnChainLinks(ctx, z, arena);
       else if (z.chainType === "giant") drawGiantChainLinks(ctx, z, arena);
+      else if (z.chainType === "phase") drawPhaseChainLinks(ctx, z, arena);
       else if (z.chainType === "tracking") drawTrackingChain(ctx, z);
       else drawChainLinks(ctx, z, arena);
     }

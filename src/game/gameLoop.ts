@@ -2,7 +2,7 @@ import type { Player } from "./player";
 import { updatePlayer, drawPlayer } from "./player";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
-import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS } from "./warning";
+import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual } from "./warning/index";
 import { createItems, updateItems, drawItems, tryPickup, resetItems } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing } from "./hud";
 
@@ -69,6 +69,11 @@ export function startGameLoop(
       const base       = isVert ? arena.y : arena.x;
       const adjBase    = base + CHAIN_LINK_R;
       const adjMax     = base + fullLen - CHAIN_LINK_R;
+
+      if (chain.chainType === "phase") {
+        const cfg = CHAIN_CONFIGS[chain.chainType] ?? CHAIN_CONFIGS["normal"];
+        if (!getPhaseCycleVisual(chain.elapsed, cfg).solid) continue;
+      }
 
       if (chain.chainType === "tracking") {
         const cfg = CHAIN_CONFIGS[chain.chainType] ?? CHAIN_CONFIGS["normal"];
