@@ -64,16 +64,16 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
   },
   tracking: {
     extendDuration:   0.01,
-    activeDuration:   1.55,
+    activeDuration:   2.8,
     exitDuration:     0.01,
     warningDuration:  1.4,
     warningColor:     "#00cc66",
     linkColor:        "#44ff99",
-    trackingStrength: 0.16,
-    maxTurnRate:      0.9,
+    trackingStrength: 0.78,
+    maxTurnRate:      1.05,
     speed:            260,
     chainWidth:       16,
-    lifetime:         1.55,
+    lifetime:         2.8,
   },
 };
 
@@ -100,7 +100,11 @@ export interface Zone {
   trackHeadY:  number;   // tracking 체인 헤드 위치 Y
   trackDirX:   number;   // tracking 체인 진행 방향 X
   trackDirY:   number;   // tracking 체인 진행 방향 Y
+  trackStartX: number;   // tracking 체인 시작점 X
+  trackStartY: number;   // tracking 체인 시작점 Y
   trackBaseAngle: number;// tracking 체인 초기 직진 방향 각도
+  trackTurnAngle: number;// tracking 체인 꺾인 뒤 진행 각도
+  trackTurned: boolean;  // tracking 체인 꺾임 여부
   trackPoints: TrackPoint[]; // tracking 체인 궤적
 }
 
@@ -206,9 +210,13 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
   const trackHeadY = isVert
     ? (direction === 1 ? arena.y + trackHalfWidth : arena.y + arena.h - trackHalfWidth)
     : centerPos;
+  const trackStartX = trackHeadX;
+  const trackStartY = trackHeadY;
   const trackDirX = isVert ? 0 : direction;
   const trackDirY = isVert ? direction : 0;
   const trackBaseAngle = Math.atan2(trackDirY, trackDirX);
+  const trackTurnAngle = trackBaseAngle;
+  const trackTurned = false;
   const trackPoints: TrackPoint[] = [{ x: trackHeadX, y: trackHeadY }];
 
   zones.push({
@@ -216,57 +224,53 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal"): void {
     phase: "warning", elapsed: 0,
     direction, drawLength: 0, exitOffset: 0,
     chainType, fakePos, chainRadius, turnDir, turnPoint, seg1Len, seg2Len,
-    trackHeadX, trackHeadY, trackDirX, trackDirY, trackBaseAngle, trackPoints,
+    trackHeadX, trackHeadY, trackDirX, trackDirY,
+    trackStartX, trackStartY, trackBaseAngle, trackTurnAngle, trackTurned, trackPoints,
   });
 }
 
-function updateTrackingZone(z: Zone, target: Player, arena: Arena, dt: number): void {
+function updateTrackingZone(z: Zone, target: Player): void {
   const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
   const trackingStrength = cfg.trackingStrength ?? 0.16;
   const maxTurnRate = cfg.maxTurnRate ?? 0.9;
   const speed = cfg.speed ?? 260;
-  const maxDeviation = Math.PI / 3;
+  const totalLen = speed * (cfg.lifetime ?? cfg.activeDuration);
+  const visibleLen = Math.min(totalLen, speed * z.elapsed);
+  const bendLen = totalLen * 0.24;
 
-  const currentAngle = Math.atan2(z.trackDirY, z.trackDirX);
-  const targetAngle = Math.atan2(target.y - z.trackHeadY, target.x - z.trackHeadX);
-  let turnDelta = normalizeAngle(targetAngle - currentAngle) * trackingStrength;
-  turnDelta = clamp(turnDelta, -maxTurnRate * dt, maxTurnRate * dt);
+  z.trackPoints.length = 0;
+  z.trackPoints.push({ x: z.trackStartX, y: z.trackStartY });
 
-  let nextAngle = currentAngle + turnDelta;
-  const relativeAngle = clamp(
-    normalizeAngle(nextAngle - z.trackBaseAngle),
-    -maxDeviation,
-    maxDeviation,
-  );
-  nextAngle = z.trackBaseAngle + relativeAngle;
-
-  z.trackDirX = Math.cos(nextAngle);
-  z.trackDirY = Math.sin(nextAngle);
-  z.trackHeadX += z.trackDirX * speed * dt;
-  z.trackHeadY += z.trackDirY * speed * dt;
-
-  const last = z.trackPoints[z.trackPoints.length - 1];
-  if (!last) {
+  if (visibleLen <= bendLen) {
+    z.trackHeadX = z.trackStartX + Math.cos(z.trackBaseAngle) * visibleLen;
+    z.trackHeadY = z.trackStartY + Math.sin(z.trackBaseAngle) * visibleLen;
+    z.trackDirX = Math.cos(z.trackBaseAngle);
+    z.trackDirY = Math.sin(z.trackBaseAngle);
     z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
     return;
   }
 
-  const dx = z.trackHeadX - last.x;
-  const dy = z.trackHeadY - last.y;
-  if (Math.sqrt(dx * dx + dy * dy) >= 5) {
-    z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
-  } else {
-    last.x = z.trackHeadX;
-    last.y = z.trackHeadY;
+  const bendX = z.trackStartX + Math.cos(z.trackBaseAngle) * bendLen;
+  const bendY = z.trackStartY + Math.sin(z.trackBaseAngle) * bendLen;
+  if (!z.trackTurned) {
+    const targetAngle = Math.atan2(target.y - bendY, target.x - bendX);
+    const turnDelta = clamp(
+      normalizeAngle(targetAngle - z.trackBaseAngle) * trackingStrength,
+      -maxTurnRate,
+      maxTurnRate,
+    );
+    z.trackTurnAngle = z.trackBaseAngle + turnDelta;
+    z.trackTurned = true;
   }
 
-  const margin = (cfg.chainWidth ?? 16) * 1.2;
-  if (
-    z.trackHeadX < arena.x - margin || z.trackHeadX > arena.x + arena.w + margin ||
-    z.trackHeadY < arena.y - margin || z.trackHeadY > arena.y + arena.h + margin
-  ) {
-    z.elapsed = cfg.lifetime ?? cfg.activeDuration;
-  }
+  const secondLen = visibleLen - bendLen;
+  z.trackDirX = Math.cos(z.trackTurnAngle);
+  z.trackDirY = Math.sin(z.trackTurnAngle);
+  z.trackHeadX = bendX + z.trackDirX * secondLen;
+  z.trackHeadY = bendY + z.trackDirY * secondLen;
+
+  z.trackPoints.push({ x: bendX, y: bendY });
+  z.trackPoints.push({ x: z.trackHeadX, y: z.trackHeadY });
 }
 
 function sampleTrackingPoints(points: TrackPoint[], spacing: number): TrackPoint[] {
@@ -364,7 +368,7 @@ export function updateWarnings(
     } else if (z.phase === "active") {
       const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
       if (z.chainType === "tracking") {
-        updateTrackingZone(z, players[z.arenaIdx], arenas[z.arenaIdx], dt);
+        updateTrackingZone(z, players[z.arenaIdx]);
         if (z.elapsed >= (cfg.lifetime ?? cfg.activeDuration)) zones.splice(i, 1);
       } else if (z.elapsed >= cfg.activeDuration) {
         z.phase = "exiting"; z.elapsed = 0; z.exitOffset = 0;
@@ -772,39 +776,56 @@ function drawTrackingChain(ctx: CanvasRenderingContext2D, z: Zone): void {
   const cfg = CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS["normal"];
   const width = cfg.chainWidth ?? 16;
   const connectorWidth = width * 0.42;
-  const ringRadius = width * 0.34;
-  const points = sampleTrackingPoints(z.trackPoints, Math.max(12, width * 0.9));
+  const ringRadius = width * 0.36;
+  const points = sampleTrackingPoints(z.trackPoints, Math.max(11, ringRadius * 2.4));
   if (points.length === 0) return;
 
+  // glow pass — Tracking도 긴 뱀선이 아니라 링크 사이 연결부만 glow 처리
   if (points.length > 1) {
     ctx.globalAlpha = 0.16;
     ctx.strokeStyle = cfg.linkColor;
-    ctx.lineWidth = width * 1.35;
+    ctx.lineWidth = width * 1.15;
     ctx.lineCap = "round";
-    ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y);
+      const prev = points[i - 1];
+      const curr = points[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= ringRadius * 2) continue;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      ctx.moveTo(prev.x + ux * ringRadius, prev.y + uy * ringRadius);
+      ctx.lineTo(curr.x - ux * ringRadius, curr.y - uy * ringRadius);
     }
     ctx.stroke();
   }
 
+  // main pass — 실제 사슬 링크 연결부
   ctx.globalAlpha = 1.0;
   ctx.strokeStyle = cfg.linkColor;
   ctx.lineWidth = connectorWidth;
   ctx.lineCap = "round";
-  ctx.lineJoin = "round";
   if (points.length > 1) {
     ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y);
+      const prev = points[i - 1];
+      const curr = points[i];
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= ringRadius * 2) continue;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      ctx.moveTo(prev.x + ux * ringRadius, prev.y + uy * ringRadius);
+      ctx.lineTo(curr.x - ux * ringRadius, curr.y - uy * ringRadius);
     }
     ctx.stroke();
   }
 
-  ctx.lineWidth = Math.max(2, width * 0.18);
+  // 링 자체는 끝까지 원형 링크로 보이도록 별도 렌더
+  ctx.lineWidth = Math.max(2, width * 0.2);
   ctx.lineCap = "butt";
   ctx.beginPath();
   for (const point of points) {
