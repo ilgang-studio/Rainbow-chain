@@ -23,15 +23,10 @@ const SETTINGS_STORAGE_KEY = "rainbow-chain-settings";
 const GUEST_NICKNAME_STORAGE_KEY = "guestNickname";
 const BATTLE_TRACKS = [battleTrackA, battleTrackB, battleTrackC];
 const MATCHMAKING_DURATION_SECONDS = 20;
-const TRANSITION_SWAP_MS = 360;
-const TRANSITION_TOTAL_MS = 940;
-const TRANSITION_CHAINS = Array.from({ length: 24 }, (_, index) => ({
-  top: `${-6 + index * 5}%`,
-  delay: `${(index * 26) % 280}ms`,
-  duration: `${720 + (index % 5) * 28}ms`,
-  scale: 0.86 + (index % 6) * 0.07,
-  opacity: 0.66 + (index % 4) * 0.08,
-}));
+const TRANSITION_FADE_MS = 320;
+const TRANSITION_HOLD_MS = 200;
+const TRANSITION_SWAP_MS = TRANSITION_FADE_MS;
+const TRANSITION_TOTAL_MS = TRANSITION_FADE_MS * 2 + TRANSITION_HOLD_MS;
 
 function createMenuDust(count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -118,24 +113,47 @@ function MenuBackground({ particleCount }: { particleCount: number }) {
   );
 }
 
-function ChainTransitionOverlay({ active }: { active: boolean }) {
+function LoadingTransitionOverlay({
+  active,
+  label,
+}: {
+  active: boolean;
+  label: string;
+}) {
+  const dust = useMemo(
+    () => createMenuDust(22).map((particle) => ({
+      ...particle,
+      size: Math.max(2, particle.size - 1.5),
+      opacity: Math.min(0.22, particle.opacity * 0.55),
+      duration: particle.duration * 0.7,
+    })),
+    [],
+  );
+
   return (
-    <div className={`screen-chain-transition ${active ? "is-active" : ""}`} aria-hidden="true">
-      {TRANSITION_CHAINS.map((chain, index) => (
+    <div className={`screen-loading-transition ${active ? "is-active" : ""}`} aria-hidden="true">
+      <div className="screen-loading-transition__veil" />
+      {dust.map((particle) => (
         <span
-          key={`${chain.top}-${index}`}
-          className="screen-chain-transition__chain"
+          key={particle.id}
+          className="screen-loading-transition__dust"
           style={
             {
-              "--chain-top": chain.top,
-              "--chain-delay": chain.delay,
-              "--chain-duration": chain.duration,
-              "--chain-scale": String(chain.scale),
-              "--chain-opacity": String(chain.opacity),
+              left: particle.left,
+              width: `${particle.size}px`,
+              height: `${particle.size}px`,
+              animationDuration: `${particle.duration}s`,
+              animationDelay: `-${particle.delay}s`,
+              "--dust-drift": `${particle.drift}px`,
+              "--dust-opacity": String(particle.opacity),
             } as CSSProperties
           }
         />
       ))}
+      <div className="screen-loading-transition__label">
+        <span>{label}</span>
+        <span className="screen-loading-transition__dots" aria-hidden="true" />
+      </div>
     </div>
   );
 }
@@ -442,6 +460,7 @@ export default function App() {
   const [nicknameInput, setNicknameInput] = useState(storedGuestNickname);
   const [hasEnteredNickname, setHasEnteredNickname] = useState(storedGuestNickname.length > 0);
   const [transitionActive, setTransitionActive] = useState(false);
+  const [transitionLabel, setTransitionLabel] = useState("LOADING");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioKindRef = useRef<"menu" | "battle" | null>(null);
   const audioTrackRef = useRef<string | null>(null);
@@ -497,7 +516,7 @@ export default function App() {
         window.clearInterval(timerId);
         setAiMatchDeployed(true);
         deployTimeoutId = window.setTimeout(() => {
-          runScreenTransition(() => {
+          runScreenTransition("DEPLOYING AI OPPONENT", () => {
             setView("menu");
             setSelectedMode("casual");
           });
@@ -658,9 +677,10 @@ export default function App() {
     transitionBusyRef.current = false;
   };
 
-  const runScreenTransition = (applyChange: () => void) => {
+  const runScreenTransition = (label: string, applyChange: () => void) => {
     if (transitionBusyRef.current) return;
     transitionBusyRef.current = true;
+    setTransitionLabel(label);
     setTransitionActive(true);
     clearTransitionTimers();
     transitionBusyRef.current = true;
@@ -683,7 +703,7 @@ export default function App() {
         mode={selectedMode}
         settings={settings}
         onExit={() => {
-          runScreenTransition(() => {
+          runScreenTransition("LOADING", () => {
             setSelectedMode(null);
             setView("menu");
           });
@@ -699,7 +719,7 @@ export default function App() {
         particleCount={particleCount}
         onBack={() => {
           setListeningKey(null);
-          runScreenTransition(() => setView("menu"));
+          runScreenTransition("LOADING", () => setView("menu"));
         }}
         onChange={setSettings}
         onChangeNickname={updateGuestNickname}
@@ -715,7 +735,7 @@ export default function App() {
         queueMode={queueMode}
         aiDeployed={aiMatchDeployed}
         onCancel={() => {
-          runScreenTransition(() => {
+          runScreenTransition("LOADING", () => {
             setQueueSeconds(0);
             setAiMatchDeployed(false);
             setView("menu");
@@ -729,14 +749,14 @@ export default function App() {
         language={settings.language}
         nickname={guestNickname || "Guest_00"}
         particleCount={particleCount}
-        onOpenSettings={() => runScreenTransition(() => setView("settings"))}
+        onOpenSettings={() => runScreenTransition("LOADING", () => setView("settings"))}
         onQueueStart={(mode) => {
-          runScreenTransition(() => {
+          runScreenTransition("MATCHMAKING", () => {
             setQueueMode(mode);
             setView("matchmaking");
           });
         }}
-        onStartGame={(mode) => runScreenTransition(() => setSelectedMode(mode))}
+        onStartGame={(mode) => runScreenTransition("LOADING", () => setSelectedMode(mode))}
       />
     );
   }
@@ -751,7 +771,7 @@ export default function App() {
           onConfirm={confirmGuestNickname}
         />
       ) : null}
-      <ChainTransitionOverlay active={transitionActive} />
+      <LoadingTransitionOverlay active={transitionActive} label={transitionLabel} />
     </div>
   );
 }
