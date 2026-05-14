@@ -66,10 +66,10 @@ export function drawEncounterIntro(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
   canvasHeight: number,
-  encounter: EncounterConfig,
+  encounter: EncounterConfig | null,
   remaining: number,
 ): void {
-  if (remaining <= 0) return;
+  if (!encounter || remaining <= 0) return;
   const fade = Math.min(1, remaining / 0.45, (3 - remaining) / 0.45);
   const cx = canvasWidth / 2;
   const cy = canvasHeight * 0.16;

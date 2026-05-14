@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import GameCanvas from "./components/GameCanvas";
 import { DEFAULT_SETTINGS, type AppSettings } from "./settings";
-import battleTrackA from "./assets/Nervous Footsteps.wav";
-import battleTrackB from "./assets/Submerged Split.wav";
-import battleTrackC from "./assets/Tilted Piano Room.wav";
-import mainThemeTrack from "./assets/mainthema.wav";
+import battleTrackA from "./assets/Nervous Footsteps.mp3";
+import battleTrackB from "./assets/Submerged Split.mp3";
+import battleTrackC from "./assets/Tilted Piano Room.mp3";
+import mainThemeTrack from "./assets/mainthema.mp3";
 import "./app.css";
 
 const MENU_ITEMS = [
@@ -15,11 +15,23 @@ const MENU_ITEMS = [
 ] as const;
 
 type MenuMode = "casual" | "practice" | "double";
-type ViewState = "menu" | "settings";
+type QueueMode = "casual" | "ranked";
+type ViewState = "menu" | "settings" | "matchmaking";
 type ControlKey = keyof AppSettings["controls"];
 
 const SETTINGS_STORAGE_KEY = "rainbow-chain-settings";
+const GUEST_NICKNAME_STORAGE_KEY = "guestNickname";
 const BATTLE_TRACKS = [battleTrackA, battleTrackB, battleTrackC];
+const MATCHMAKING_DURATION_SECONDS = 20;
+const TRANSITION_SWAP_MS = 360;
+const TRANSITION_TOTAL_MS = 940;
+const TRANSITION_CHAINS = Array.from({ length: 24 }, (_, index) => ({
+  top: `${-6 + index * 5}%`,
+  delay: `${(index * 26) % 280}ms`,
+  duration: `${720 + (index % 5) * 28}ms`,
+  scale: 0.86 + (index % 6) * 0.07,
+  opacity: 0.66 + (index % 4) * 0.08,
+}));
 
 function createMenuDust(count: number) {
   return Array.from({ length: count }, (_, index) => ({
@@ -53,6 +65,28 @@ function readStoredSettings(): AppSettings {
   }
 }
 
+function sanitizeNickname(value: string): string {
+  return value.trim().slice(0, 8);
+}
+
+function generateGuestNickname(): string {
+  return `Guest_${Math.floor(10 + Math.random() * 90)}`;
+}
+
+function readStoredGuestNickname(): string {
+  if (typeof window === "undefined") return "";
+  const raw = window.localStorage.getItem(GUEST_NICKNAME_STORAGE_KEY);
+  return raw ? sanitizeNickname(raw) : "";
+}
+
+function saveGuestNickname(value: string): string {
+  const nextNickname = sanitizeNickname(value) || generateGuestNickname();
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(GUEST_NICKNAME_STORAGE_KEY, nextNickname);
+  }
+  return nextNickname;
+}
+
 function formatKeyLabel(key: string): string {
   if (key === " ") return "SPACE";
   return key.length === 1 ? key.toUpperCase() : key.toUpperCase().replace("ARROW", "");
@@ -84,19 +118,84 @@ function MenuBackground({ particleCount }: { particleCount: number }) {
   );
 }
 
+function ChainTransitionOverlay({ active }: { active: boolean }) {
+  return (
+    <div className={`screen-chain-transition ${active ? "is-active" : ""}`} aria-hidden="true">
+      {TRANSITION_CHAINS.map((chain, index) => (
+        <span
+          key={`${chain.top}-${index}`}
+          className="screen-chain-transition__chain"
+          style={
+            {
+              "--chain-top": chain.top,
+              "--chain-delay": chain.delay,
+              "--chain-duration": chain.duration,
+              "--chain-scale": String(chain.scale),
+              "--chain-opacity": String(chain.opacity),
+            } as CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+function formatQueueTime(totalSeconds: number): string {
+  return `00:${String(Math.min(MATCHMAKING_DURATION_SECONDS, totalSeconds)).padStart(2, "0")}`;
+}
+
+function GuestNicknameModal({
+  value,
+  onChange,
+  onConfirm,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="guest-modal-backdrop">
+      <form
+        className="guest-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+      >
+        <p className="guest-modal__title">Please write your nickname.</p>
+        <input
+          autoFocus
+          maxLength={8}
+          value={value}
+          onChange={(event) => onChange(event.target.value.slice(0, 8))}
+          className="guest-modal__input"
+          type="text"
+          spellCheck={false}
+        />
+        <button type="submit" className="guest-modal__button">
+          start
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function MainMenu({
   language,
+  nickname,
   particleCount,
   onOpenSettings,
-  onStart,
+  onQueueStart,
+  onStartGame,
 }: {
   language: AppSettings["language"];
+  nickname: string;
   particleCount: number;
   onOpenSettings: () => void;
-  onStart: (mode: MenuMode) => void;
+  onQueueStart: (mode: QueueMode) => void;
+  onStartGame: (mode: MenuMode) => void;
 }) {
   const title = language === "ko" ? "레인보우-체인" : "Rainbow-chain";
-  const nickname = language === "ko" ? "닉네임" : "Nickname";
 
   return (
     <main className="menu-shell">
@@ -120,7 +219,11 @@ function MainMenu({
                     onOpenSettings();
                     return;
                   }
-                  onStart(item.id);
+                  if (item.id === "casual") {
+                    onQueueStart(item.id);
+                    return;
+                  }
+                  onStartGame(item.id);
                 }}
               >
                 <span className="menu-button-label">{item.label.toLowerCase()}</span>
@@ -133,19 +236,72 @@ function MainMenu({
   );
 }
 
+function MatchmakingView({
+  nickname,
+  particleCount,
+  elapsedSeconds,
+  queueMode,
+  aiDeployed,
+  onCancel,
+}: {
+  nickname: string;
+  particleCount: number;
+  elapsedSeconds: number;
+  queueMode: QueueMode;
+  aiDeployed: boolean;
+  onCancel: () => void;
+}) {
+  return (
+    <main className="menu-shell">
+      <section className="menu-frame matchmaking-frame" aria-label="Matchmaking">
+        <MenuBackground particleCount={particleCount} />
+
+        <header className="matchmaking-header">
+          <h1 className="menu-title">Rainbow-chain</h1>
+          <div className="matchmaking-timer-wrap">
+            <div className="matchmaking-timer">{formatQueueTime(elapsedSeconds)}</div>
+          </div>
+          <div className="menu-nickname">{nickname}</div>
+        </header>
+
+        <section className="matchmaking-body">
+          <div className="matchmaking-card">
+            <div className="matchmaking-label">{queueMode === "ranked" ? "RANKED MATCHMAKING" : "CASUAL MATCHMAKING"}</div>
+            <div className={`matchmaking-status ${aiDeployed ? "is-ready" : ""}`}>
+              {aiDeployed ? "AI MATCH" : "MATCHMAKING"}
+            </div>
+            <div className="matchmaking-detail">
+              {aiDeployed ? "AI opponent deployed" : "Searching for opponent..."}
+            </div>
+            {!aiDeployed ? (
+              <button type="button" className="matchmaking-cancel" onClick={onCancel}>
+                cancel
+              </button>
+            ) : null}
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}
+
 function SettingsView({
   settings,
+  nickname,
   listeningKey,
   particleCount,
   onBack,
   onChange,
+  onChangeNickname,
   onStartListening,
 }: {
   settings: AppSettings;
+  nickname: string;
   listeningKey: ControlKey | null;
   particleCount: number;
   onBack: () => void;
   onChange: (next: AppSettings) => void;
+  onChangeNickname: (value: string) => void;
   onStartListening: (key: ControlKey) => void;
 }) {
   return (
@@ -161,6 +317,21 @@ function SettingsView({
         </header>
 
         <section className="settings-grid">
+          <section className="settings-card">
+            <h2 className="settings-heading">Nickname</h2>
+            <label className="settings-input-row">
+              <span className="settings-label">Guest Name</span>
+              <input
+                type="text"
+                maxLength={8}
+                value={nickname}
+                className="settings-text-input"
+                onChange={(event) => onChangeNickname(event.target.value)}
+                spellCheck={false}
+              />
+            </label>
+          </section>
+
           <section className="settings-card">
             <h2 className="settings-heading">Language</h2>
             <div className="settings-segment">
@@ -259,17 +430,30 @@ function SettingsView({
 }
 
 export default function App() {
+  const storedGuestNickname = readStoredGuestNickname();
   const [selectedMode, setSelectedMode] = useState<MenuMode | null>(null);
   const [view, setView] = useState<ViewState>("menu");
+  const [queueMode, setQueueMode] = useState<QueueMode>("casual");
+  const [queueSeconds, setQueueSeconds] = useState(0);
+  const [aiMatchDeployed, setAiMatchDeployed] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [listeningKey, setListeningKey] = useState<ControlKey | null>(null);
+  const [guestNickname, setGuestNickname] = useState(storedGuestNickname);
+  const [nicknameInput, setNicknameInput] = useState(storedGuestNickname);
+  const [hasEnteredNickname, setHasEnteredNickname] = useState(storedGuestNickname.length > 0);
+  const [transitionActive, setTransitionActive] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioKindRef = useRef<"menu" | "battle" | null>(null);
   const audioTrackRef = useRef<string | null>(null);
   const retryAudioRef = useRef<(() => void) | null>(null);
+  const audioResumeRef = useRef<(() => void) | null>(null);
+  const transitionTimersRef = useRef<number[]>([]);
+  const transitionBusyRef = useRef(false);
 
   useEffect(() => {
     return () => {
+      for (const timerId of transitionTimersRef.current) window.clearTimeout(timerId);
+      transitionTimersRef.current = [];
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = "";
@@ -280,8 +464,69 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const resumeAudio = () => {
+      audioResumeRef.current?.();
+    };
+
+    window.addEventListener("pointerdown", resumeAudio, true);
+    window.addEventListener("keydown", resumeAudio, true);
+    return () => {
+      window.removeEventListener("pointerdown", resumeAudio, true);
+      window.removeEventListener("keydown", resumeAudio, true);
+    };
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    if (view !== "matchmaking") return;
+    setQueueSeconds(0);
+    setAiMatchDeployed(false);
+
+    const startedAt = Date.now();
+    let deployTimeoutId = 0;
+    const timerId = window.setInterval(() => {
+      const elapsed = Math.min(
+        MATCHMAKING_DURATION_SECONDS,
+        Math.floor((Date.now() - startedAt) / 1000),
+      );
+      setQueueSeconds(elapsed);
+      if (elapsed >= MATCHMAKING_DURATION_SECONDS) {
+        window.clearInterval(timerId);
+        setAiMatchDeployed(true);
+        deployTimeoutId = window.setTimeout(() => {
+          runScreenTransition(() => {
+            setView("menu");
+            setSelectedMode("casual");
+          });
+        }, 1100);
+      }
+    }, 200);
+
+    return () => {
+      window.clearInterval(timerId);
+      window.clearTimeout(deployTimeoutId);
+    };
+  }, [view, queueMode]);
+
+  const confirmGuestNickname = () => {
+    const nextNickname = saveGuestNickname(nicknameInput);
+    setGuestNickname(nextNickname);
+    setNicknameInput(nextNickname);
+    setHasEnteredNickname(true);
+  };
+
+  const updateGuestNickname = (value: string) => {
+    const nextInput = value.slice(0, 8);
+    setGuestNickname(nextInput);
+    setNicknameInput(nextInput);
+    const nextNickname = saveGuestNickname(nextInput);
+    setGuestNickname(nextNickname);
+    setNicknameInput(nextNickname);
+    setHasEnteredNickname(true);
+  };
 
   useEffect(() => {
     if (listeningKey === null) return;
@@ -372,6 +617,8 @@ export default function App() {
       });
     };
 
+    audioResumeRef.current = playRequestedAudio;
+
     if (audioRef.current) {
       audioRef.current.volume = volume;
     }
@@ -382,7 +629,12 @@ export default function App() {
       playRequestedAudio();
     }
 
-    return cleanupRetry;
+    return () => {
+      cleanupRetry();
+      if (audioResumeRef.current === playRequestedAudio) {
+        audioResumeRef.current = null;
+      }
+    };
   }, [selectedMode, settings.bgmVolume]);
 
   const particleCount = settings.particleIntensity === "low"
@@ -400,42 +652,106 @@ export default function App() {
           : "1",
   } as CSSProperties;
 
+  const clearTransitionTimers = () => {
+    for (const timerId of transitionTimersRef.current) window.clearTimeout(timerId);
+    transitionTimersRef.current = [];
+    transitionBusyRef.current = false;
+  };
+
+  const runScreenTransition = (applyChange: () => void) => {
+    if (transitionBusyRef.current) return;
+    transitionBusyRef.current = true;
+    setTransitionActive(true);
+    clearTransitionTimers();
+    transitionBusyRef.current = true;
+
+    transitionTimersRef.current.push(window.setTimeout(() => {
+      applyChange();
+    }, TRANSITION_SWAP_MS));
+
+    transitionTimersRef.current.push(window.setTimeout(() => {
+      setTransitionActive(false);
+      transitionBusyRef.current = false;
+      transitionTimersRef.current = [];
+    }, TRANSITION_TOTAL_MS));
+  };
+
+  let content = null;
   if (selectedMode !== null) {
-    return (
+    content = (
       <GameCanvas
         mode={selectedMode}
         settings={settings}
-        onExit={() => setSelectedMode(null)}
+        onExit={() => {
+          runScreenTransition(() => {
+            setSelectedMode(null);
+            setView("menu");
+          });
+        }}
       />
     );
-  }
-
-  if (view === "settings") {
-    return (
-      <div style={shellStyle}>
-        <SettingsView
-          settings={settings}
-          listeningKey={listeningKey}
-          particleCount={particleCount}
-          onBack={() => {
-            setListeningKey(null);
+  } else if (view === "settings") {
+    content = (
+      <SettingsView
+        settings={settings}
+        nickname={guestNickname}
+        listeningKey={listeningKey}
+        particleCount={particleCount}
+        onBack={() => {
+          setListeningKey(null);
+          runScreenTransition(() => setView("menu"));
+        }}
+        onChange={setSettings}
+        onChangeNickname={updateGuestNickname}
+        onStartListening={setListeningKey}
+      />
+    );
+  } else if (view === "matchmaking") {
+    content = (
+      <MatchmakingView
+        nickname={guestNickname || generateGuestNickname()}
+        particleCount={particleCount}
+        elapsedSeconds={queueSeconds}
+        queueMode={queueMode}
+        aiDeployed={aiMatchDeployed}
+        onCancel={() => {
+          runScreenTransition(() => {
+            setQueueSeconds(0);
+            setAiMatchDeployed(false);
             setView("menu");
-          }}
-          onChange={setSettings}
-          onStartListening={setListeningKey}
-        />
-      </div>
+          });
+        }}
+      />
+    );
+  } else {
+    content = (
+      <MainMenu
+        language={settings.language}
+        nickname={guestNickname || "Guest_00"}
+        particleCount={particleCount}
+        onOpenSettings={() => runScreenTransition(() => setView("settings"))}
+        onQueueStart={(mode) => {
+          runScreenTransition(() => {
+            setQueueMode(mode);
+            setView("matchmaking");
+          });
+        }}
+        onStartGame={(mode) => runScreenTransition(() => setSelectedMode(mode))}
+      />
     );
   }
 
   return (
     <div style={shellStyle}>
-      <MainMenu
-        language={settings.language}
-        particleCount={particleCount}
-        onOpenSettings={() => setView("settings")}
-        onStart={setSelectedMode}
-      />
+      {content}
+      {!hasEnteredNickname ? (
+        <GuestNicknameModal
+          value={nicknameInput}
+          onChange={setNicknameInput}
+          onConfirm={confirmGuestNickname}
+        />
+      ) : null}
+      <ChainTransitionOverlay active={transitionActive} />
     </div>
   );
 }

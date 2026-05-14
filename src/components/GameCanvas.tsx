@@ -22,6 +22,11 @@ export default function GameCanvas({
   const [gameOver, setGameOver] = useState(false);
   const [runId, setRunId] = useState(0);
 
+  const restartGame = () => {
+    setGameOver(false);
+    setRunId((value) => value + 1);
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current!;
     if (!chainAudioRef.current) {
@@ -66,6 +71,7 @@ export default function GameCanvas({
       enableAi: mode === "casual",
       practiceMode: mode === "practice",
       onChainLaunch: playChainSfx,
+      onRestartRequest: restartGame,
     }, setGameOver);
 
     return () => {
@@ -108,10 +114,7 @@ export default function GameCanvas({
         >
           <button
             type="button"
-            onClick={() => {
-              setGameOver(false);
-              setRunId((value) => value + 1);
-            }}
+            onClick={restartGame}
             style={{
               minWidth: "176px",
               padding: "14px 18px",

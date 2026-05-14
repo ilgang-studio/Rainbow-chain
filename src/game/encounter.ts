@@ -40,6 +40,9 @@ export const ENCOUNTERS: EncounterConfig[] = [
   },
 ];
 
-export function getRandomEncounter(): EncounterConfig {
-  return ENCOUNTERS[Math.floor(Math.random() * ENCOUNTERS.length)];
+export function getRandomEncounter(): EncounterConfig | null {
+  const poolSize = ENCOUNTERS.length + 1;
+  const roll = Math.floor(Math.random() * poolSize);
+  if (roll === ENCOUNTERS.length) return null;
+  return ENCOUNTERS[roll];
 }

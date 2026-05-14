@@ -63,8 +63,8 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
   },
   tracking: {
     extendDuration:   0.55,
-    activeDuration:   2.8,
-    exitDuration:     1.05,
+    activeDuration:   0.45,
+    exitDuration:     0.38,
     warningDuration:  1.4,
     warningColor:     "#00cc66",
     linkColor:        "#44ff99",

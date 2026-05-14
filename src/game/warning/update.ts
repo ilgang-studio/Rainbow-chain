@@ -25,7 +25,7 @@ function spawnCount(gameTime: number): number {
   return 1;
 }
 
-function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig): void {
+function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig | null): void {
   const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
   let centerPos = orientation === "vertical"
@@ -214,7 +214,7 @@ export function updateWarnings(
   players: [Player, Player],
   gameTime: number,
   options?: { practiceMode?: boolean; onChainLaunch?: () => void },
-  encounter?: EncounterConfig,
+  encounter?: EncounterConfig | null,
 ): void {
   const practiceMode = options?.practiceMode ?? false;
   const interval =
@@ -324,6 +324,6 @@ export function updateWarnings(
   }
 }
 
-export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena], chainType: string, encounter?: EncounterConfig): void {
+export function fireChain(arenaIdx: 0 | 1, arenas: [Arena, Arena], chainType: string, encounter?: EncounterConfig | null): void {
   spawnZone(arenaIdx, arenas[arenaIdx], chainType, encounter);
 }

@@ -4,9 +4,9 @@ import type { Arena } from "./arena";
 import { drawArena } from "./arena";
 import { getRandomEncounter, type EncounterConfig } from "./encounter";
 import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual } from "./warning/index";
-import { createItems, updateItemsWithRate, drawItems, tryPickup, resetItems } from "./item";
+import { createItems, updateItemsWithRate, drawItems, tryPickup } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing, drawEncounterIntro } from "./hud";
-import { createArenaAi, resetArenaAi, updateArenaAi } from "./ai";
+import { createArenaAi, updateArenaAi } from "./ai";
 
 const MAX_DT = 1 / 30;
 
@@ -14,10 +14,16 @@ export function startGameLoop(
   canvas: HTMLCanvasElement,
   players: [Player, Player],
   arenas: [Arena, Arena],
-  options?: { enableAi?: boolean; practiceMode?: boolean; onChainLaunch?: () => void },
+  options?: {
+    enableAi?: boolean;
+    practiceMode?: boolean;
+    onChainLaunch?: () => void;
+    onRestartRequest?: () => void;
+  },
   onGameOverChange?: (isGameOver: boolean) => void,
 ): () => void {
   const ctx   = canvas.getContext("2d")!;
+  resetWarnings();
   let rafId   = 0;
   let lastTime = performance.now();
   let isGameOver  = false;
@@ -27,7 +33,7 @@ export function startGameLoop(
   const practiceMode = options?.practiceMode ?? false;
   const arenaCount = practiceMode ? 1 : 2;
   const playerCount = practiceMode ? 1 : 2;
-  let currentEncounter: EncounterConfig = getRandomEncounter();
+  const currentEncounter: EncounterConfig | null = getRandomEncounter();
   let encounterIntroTimer = 3;
 
   // FPS 계산: 1초 단위 샘플링
@@ -55,24 +61,6 @@ export function startGameLoop(
 
   const items = createItems(arenas);
   const arenaAi = createArenaAi();
-
-  function resetGame(): void {
-    currentEncounter = getRandomEncounter();
-    encounterIntroTimer = 3;
-    for (let i = 0; i < 2; i++) {
-      players[i].x         = arenas[i].x + arenas[i].w / 2;
-      players[i].y         = arenas[i].y + arenas[i].h / 2;
-      players[i].hasChain  = false;
-      players[i].chainType = "normal";
-    }
-    resetWarnings();
-    resetItems(items, arenas);
-    resetArenaAi(arenaAi);
-    isGameOver = false;
-    deadIdx    = null;
-    gameTime   = 0;
-    onGameOverChange?.(false);
-  }
 
   function checkCollisions(): void {
     const CHAIN_LINK_R = 3; // warning.ts LINK_R와 동일
@@ -208,7 +196,9 @@ export function startGameLoop(
   const onKey = (e: KeyboardEvent) => {
     // 재시작
     if (e.key === "r" || e.key === "R") {
-      if (isGameOver) resetGame();
+      if (isGameOver) {
+        options?.onRestartRequest?.();
+      }
       return;
     }
     if (isGameOver) return;
@@ -253,7 +243,7 @@ export function startGameLoop(
         items,
         dt,
         arenas,
-        currentEncounter.modifiers.itemRespawnRateMultiplier ?? 1,
+        currentEncounter?.modifiers.itemRespawnRateMultiplier ?? 1,
       );
 
       // ── 아이템 획득 판정 ───────────────────
@@ -273,7 +263,7 @@ export function startGameLoop(
       // ── 플레이어 이동 ──────────────────────
       updatePlayer(players[0], dt, arenas[0]);
       if (enableAi) {
-        const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], items[1]);
+        const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], arenas[0], items[1]);
         if (aiUseChain && players[1].hasChain) {
           players[1].hasChain = false;
           fireChain(0, arenas, players[1].chainType, currentEncounter);
