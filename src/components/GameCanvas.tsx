@@ -3,6 +3,7 @@ import { initInput } from "../game/input";
 import { createArenas } from "../game/arena";
 import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
+import type { RoomStartPayload } from "../network/events";
 import type { AppSettings } from "../settings";
 import chainSfxTrack from "../assets/Metal-chain.mp3";
 
@@ -10,10 +11,12 @@ type GameMode = "casual" | "practice" | "double";
 
 export default function GameCanvas({
   mode = "casual",
+  roomStart,
   settings,
   onExit,
 }: {
   mode?: GameMode;
+  roomStart?: RoomStartPayload | null;
   settings?: AppSettings;
   onExit?: () => void;
 }) {
@@ -83,6 +86,7 @@ export default function GameCanvas({
 
   return (
     <div
+      data-room-id={roomStart?.roomId}
       style={{
         position: "fixed",
         inset: 0,

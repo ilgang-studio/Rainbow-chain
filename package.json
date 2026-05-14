@@ -8,9 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server:dev": "tsx watch server/src/index.ts",
-    "server:start": "tsx server/src/index.ts",
-    "server:check": "tsc -p server/tsconfig.json --noEmit"
+    "server:dev": "npm --prefix ../rainbow-chain-server run dev",
+    "server:start": "npm --prefix ../rainbow-chain-server run start",
+    "server:check": "npm --prefix ../rainbow-chain-server run check"
   },
   "dependencies": {
     "axios": "^1.16.1",
@@ -18,7 +18,8 @@
     "express": "^5.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

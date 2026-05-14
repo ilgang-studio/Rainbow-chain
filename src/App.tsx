@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import GameCanvas from "./components/GameCanvas";
+import type {
+  ErrorPayload,
+  MatchAiFallbackPayload,
+  MatchFoundPayload,
+  QueueJoinPayload,
+  QueueTickPayload,
+  RoomStartPayload,
+} from "./network/events";
+import { socket } from "./network/socket";
 import { DEFAULT_SETTINGS, type AppSettings } from "./settings";
 import battleTrackA from "./assets/Nervous Footsteps.mp3";
 import battleTrackB from "./assets/Submerged Split.mp3";
@@ -15,14 +24,14 @@ const MENU_ITEMS = [
 ] as const;
 
 type MenuMode = "casual" | "practice" | "double";
-type QueueMode = "casual" | "ranked";
+type QueueMode = "casual";
 type ViewState = "menu" | "settings" | "matchmaking";
 type ControlKey = keyof AppSettings["controls"];
 
 const SETTINGS_STORAGE_KEY = "rainbow-chain-settings";
 const GUEST_NICKNAME_STORAGE_KEY = "guestNickname";
+const GUEST_ID_STORAGE_KEY = "guestId";
 const BATTLE_TRACKS = [battleTrackA, battleTrackB, battleTrackC];
-const MATCHMAKING_DURATION_SECONDS = 20;
 const TRANSITION_FADE_MS = 320;
 const TRANSITION_HOLD_MS = 200;
 const TRANSITION_SWAP_MS = TRANSITION_FADE_MS;
@@ -72,6 +81,26 @@ function readStoredGuestNickname(): string {
   if (typeof window === "undefined") return "";
   const raw = window.localStorage.getItem(GUEST_NICKNAME_STORAGE_KEY);
   return raw ? sanitizeNickname(raw) : "";
+}
+
+function generateGuestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `guest_${crypto.randomUUID()}`;
+  }
+  return `guest_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+function readStoredGuestId(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(GUEST_ID_STORAGE_KEY) ?? "";
+}
+
+function saveGuestId(value: string): string {
+  const nextGuestId = value.trim() || generateGuestId();
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(GUEST_ID_STORAGE_KEY, nextGuestId);
+  }
+  return nextGuestId;
 }
 
 function saveGuestNickname(value: string): string {
@@ -159,7 +188,7 @@ function LoadingTransitionOverlay({
 }
 
 function formatQueueTime(totalSeconds: number): string {
-  return `00:${String(Math.min(MATCHMAKING_DURATION_SECONDS, totalSeconds)).padStart(2, "0")}`;
+  return `00:${String(Math.max(0, Math.min(99, totalSeconds))).padStart(2, "0")}`;
 }
 
 function GuestNicknameModal({
@@ -258,14 +287,18 @@ function MatchmakingView({
   nickname,
   particleCount,
   elapsedSeconds,
-  queueMode,
+  statusLabel,
+  detailLabel,
+  canCancel,
   aiDeployed,
   onCancel,
 }: {
   nickname: string;
   particleCount: number;
   elapsedSeconds: number;
-  queueMode: QueueMode;
+  statusLabel: string;
+  detailLabel: string;
+  canCancel: boolean;
   aiDeployed: boolean;
   onCancel: () => void;
 }) {
@@ -284,14 +317,12 @@ function MatchmakingView({
 
         <section className="matchmaking-body">
           <div className="matchmaking-card">
-            <div className="matchmaking-label">{queueMode === "ranked" ? "RANKED MATCHMAKING" : "CASUAL MATCHMAKING"}</div>
+            <div className="matchmaking-label">CASUAL MATCHMAKING</div>
             <div className={`matchmaking-status ${aiDeployed ? "is-ready" : ""}`}>
-              {aiDeployed ? "AI MATCH" : "MATCHMAKING"}
+              {statusLabel}
             </div>
-            <div className="matchmaking-detail">
-              {aiDeployed ? "AI opponent deployed" : "Searching for opponent..."}
-            </div>
-            {!aiDeployed ? (
+            <div className="matchmaking-detail">{detailLabel}</div>
+            {canCancel ? (
               <button type="button" className="matchmaking-cancel" onClick={onCancel}>
                 cancel
               </button>
@@ -449,13 +480,17 @@ function SettingsView({
 
 export default function App() {
   const storedGuestNickname = readStoredGuestNickname();
+  const storedGuestId = readStoredGuestId();
   const [selectedMode, setSelectedMode] = useState<MenuMode | null>(null);
   const [view, setView] = useState<ViewState>("menu");
-  const [queueMode, setQueueMode] = useState<QueueMode>("casual");
   const [queueSeconds, setQueueSeconds] = useState(0);
   const [aiMatchDeployed, setAiMatchDeployed] = useState(false);
+  const [matchmakingStatus, setMatchmakingStatus] = useState("MATCHMAKING");
+  const [matchmakingDetail, setMatchmakingDetail] = useState("Searching for opponent...");
+  const [activeRoomStart, setActiveRoomStart] = useState<RoomStartPayload | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [listeningKey, setListeningKey] = useState<ControlKey | null>(null);
+  const [guestId, setGuestId] = useState(storedGuestId);
   const [guestNickname, setGuestNickname] = useState(storedGuestNickname);
   const [nicknameInput, setNicknameInput] = useState(storedGuestNickname);
   const [hasEnteredNickname, setHasEnteredNickname] = useState(storedGuestNickname.length > 0);
@@ -466,11 +501,19 @@ export default function App() {
   const audioTrackRef = useRef<string | null>(null);
   const retryAudioRef = useRef<(() => void) | null>(null);
   const audioResumeRef = useRef<(() => void) | null>(null);
+  const viewRef = useRef<ViewState>(view);
+  const pendingQueueJoinRef = useRef<QueueJoinPayload | null>(null);
+  const roomReadyTimerRef = useRef<number | null>(null);
+  const resetMatchmakingStateRef = useRef<() => void>(() => {});
+  const runScreenTransitionRef = useRef<(label: string, applyChange: () => void) => void>(() => {});
   const transitionTimersRef = useRef<number[]>([]);
   const transitionBusyRef = useRef(false);
 
   useEffect(() => {
     return () => {
+      if (roomReadyTimerRef.current !== null) {
+        window.clearTimeout(roomReadyTimerRef.current);
+      }
       for (const timerId of transitionTimersRef.current) window.clearTimeout(timerId);
       transitionTimersRef.current = [];
       if (audioRef.current) {
@@ -500,35 +543,8 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
-    if (view !== "matchmaking") return;
-    setQueueSeconds(0);
-    setAiMatchDeployed(false);
-
-    const startedAt = Date.now();
-    let deployTimeoutId = 0;
-    const timerId = window.setInterval(() => {
-      const elapsed = Math.min(
-        MATCHMAKING_DURATION_SECONDS,
-        Math.floor((Date.now() - startedAt) / 1000),
-      );
-      setQueueSeconds(elapsed);
-      if (elapsed >= MATCHMAKING_DURATION_SECONDS) {
-        window.clearInterval(timerId);
-        setAiMatchDeployed(true);
-        deployTimeoutId = window.setTimeout(() => {
-          runScreenTransition("DEPLOYING AI OPPONENT", () => {
-            setView("menu");
-            setSelectedMode("casual");
-          });
-        }, 1100);
-      }
-    }, 200);
-
-    return () => {
-      window.clearInterval(timerId);
-      window.clearTimeout(deployTimeoutId);
-    };
-  }, [view, queueMode]);
+    viewRef.current = view;
+  }, [view]);
 
   const confirmGuestNickname = () => {
     const nextNickname = saveGuestNickname(nicknameInput);
@@ -677,6 +693,37 @@ export default function App() {
     transitionBusyRef.current = false;
   };
 
+  const clearRoomReadyTimer = () => {
+    if (roomReadyTimerRef.current !== null) {
+      window.clearTimeout(roomReadyTimerRef.current);
+      roomReadyTimerRef.current = null;
+    }
+  };
+
+  const resetMatchmakingState = () => {
+    clearRoomReadyTimer();
+    pendingQueueJoinRef.current = null;
+    setQueueSeconds(0);
+    setAiMatchDeployed(false);
+    setMatchmakingStatus("MATCHMAKING");
+    setMatchmakingDetail("Searching for opponent...");
+  };
+
+  const ensureGuestIdentity = () => {
+    const nextGuestId = guestId || saveGuestId("");
+    const nextGuestNickname = guestNickname || saveGuestNickname(nicknameInput || guestNickname);
+
+    setGuestId(nextGuestId);
+    setGuestNickname(nextGuestNickname);
+    setNicknameInput(nextGuestNickname);
+    setHasEnteredNickname(true);
+
+    return {
+      guestId: nextGuestId,
+      nickname: nextGuestNickname,
+    };
+  };
+
   const runScreenTransition = (label: string, applyChange: () => void) => {
     if (transitionBusyRef.current) return;
     transitionBusyRef.current = true;
@@ -696,22 +743,156 @@ export default function App() {
     }, TRANSITION_TOTAL_MS));
   };
 
-  let content = null;
-  if (selectedMode !== null) {
-    content = (
+  const emitQueueJoin = (payload: QueueJoinPayload) => {
+    pendingQueueJoinRef.current = payload;
+    setMatchmakingDetail("Connecting to matchmaking server...");
+
+    if (socket.connected) {
+      socket.emit("queue:join", payload);
+      pendingQueueJoinRef.current = null;
+      return;
+    }
+
+    socket.connect();
+  };
+
+  const beginMatchmaking = (mode: QueueMode) => {
+    const identity = ensureGuestIdentity();
+    resetMatchmakingState();
+
+    const payload: QueueJoinPayload = {
+      mode,
+      nickname: identity.nickname,
+      guestId: identity.guestId,
+    };
+
+    runScreenTransition("MATCHMAKING", () => {
+      setView("matchmaking");
+      emitQueueJoin(payload);
+    });
+  };
+
+  const cancelMatchmaking = () => {
+    clearRoomReadyTimer();
+    pendingQueueJoinRef.current = null;
+
+    if (socket.connected) {
+      socket.emit("queue:cancel");
+    } else {
+      socket.disconnect();
+    }
+
+    runScreenTransition("LOADING", () => {
+      resetMatchmakingState();
+      setView("menu");
+    });
+  };
+
+  useEffect(() => {
+    resetMatchmakingStateRef.current = resetMatchmakingState;
+    runScreenTransitionRef.current = runScreenTransition;
+  });
+
+  useEffect(() => {
+    const handleConnect = () => {
+      const pendingJoin = pendingQueueJoinRef.current;
+      if (!pendingJoin) return;
+      socket.emit("queue:join", pendingJoin);
+      pendingQueueJoinRef.current = null;
+    };
+
+    const handleQueueJoined = () => {
+      setQueueSeconds(0);
+      setAiMatchDeployed(false);
+      setMatchmakingStatus("MATCHMAKING");
+      setMatchmakingDetail("Searching for opponent...");
+    };
+
+    const handleQueueTick = ({ elapsed }: QueueTickPayload) => {
+      setQueueSeconds(elapsed);
+    };
+
+    const handleQueueCancelled = () => {
+      if (viewRef.current !== "matchmaking") return;
+      resetMatchmakingStateRef.current();
+      setView("menu");
+    };
+
+    const handleMatchFound = ({ roomId, opponent }: MatchFoundPayload) => {
+      setAiMatchDeployed(false);
+      setMatchmakingStatus("MATCH FOUND");
+      setMatchmakingDetail(`${opponent.nickname} linked. Synchronizing arena...`);
+      clearRoomReadyTimer();
+      roomReadyTimerRef.current = window.setTimeout(() => {
+        socket.emit("room:ready", { roomId });
+        roomReadyTimerRef.current = null;
+      }, 280);
+    };
+
+    const handleAiFallback = ({ roomId, opponent }: MatchAiFallbackPayload) => {
+      setAiMatchDeployed(true);
+      setMatchmakingStatus("AI MATCH");
+      setMatchmakingDetail(`${opponent.nickname} deployed.`);
+      clearRoomReadyTimer();
+      roomReadyTimerRef.current = window.setTimeout(() => {
+        socket.emit("room:ready", { roomId });
+        roomReadyTimerRef.current = null;
+      }, 850);
+    };
+
+    const handleRoomStart = (payload: RoomStartPayload) => {
+      const isBotMatch = payload.players.some((player) => player.isBot);
+      runScreenTransitionRef.current(isBotMatch ? "DEPLOYING AI OPPONENT" : "LOADING", () => {
+        resetMatchmakingStateRef.current();
+        setActiveRoomStart(payload);
+        setView("menu");
+        setSelectedMode("casual");
+      });
+    };
+
+    const handleSocketError = ({ message }: ErrorPayload) => {
+      console.error(message);
+      if (viewRef.current !== "matchmaking") return;
+      setMatchmakingStatus("QUEUE ERROR");
+      setMatchmakingDetail(message);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("queue:joined", handleQueueJoined);
+    socket.on("queue:tick", handleQueueTick);
+    socket.on("queue:cancelled", handleQueueCancelled);
+    socket.on("match:found", handleMatchFound);
+    socket.on("match:ai_fallback", handleAiFallback);
+    socket.on("room:start", handleRoomStart);
+    socket.on("error", handleSocketError);
+
+    return () => {
+      clearRoomReadyTimer();
+      socket.off("connect", handleConnect);
+      socket.off("queue:joined", handleQueueJoined);
+      socket.off("queue:tick", handleQueueTick);
+      socket.off("queue:cancelled", handleQueueCancelled);
+      socket.off("match:found", handleMatchFound);
+      socket.off("match:ai_fallback", handleAiFallback);
+      socket.off("room:start", handleRoomStart);
+      socket.off("error", handleSocketError);
+    };
+  }, []);
+
+  const content = selectedMode !== null ? (
       <GameCanvas
         mode={selectedMode}
+        roomStart={activeRoomStart}
         settings={settings}
         onExit={() => {
           runScreenTransition("LOADING", () => {
+            setActiveRoomStart(null);
             setSelectedMode(null);
             setView("menu");
           });
         }}
       />
-    );
-  } else if (view === "settings") {
-    content = (
+    ) : view === "settings" ? (
       <SettingsView
         settings={settings}
         nickname={guestNickname}
@@ -725,41 +906,30 @@ export default function App() {
         onChangeNickname={updateGuestNickname}
         onStartListening={setListeningKey}
       />
-    );
-  } else if (view === "matchmaking") {
-    content = (
+    ) : view === "matchmaking" ? (
       <MatchmakingView
         nickname={guestNickname || generateGuestNickname()}
         particleCount={particleCount}
         elapsedSeconds={queueSeconds}
-        queueMode={queueMode}
+        statusLabel={matchmakingStatus}
+        detailLabel={matchmakingDetail}
+        canCancel={matchmakingStatus === "MATCHMAKING"}
         aiDeployed={aiMatchDeployed}
-        onCancel={() => {
-          runScreenTransition("LOADING", () => {
-            setQueueSeconds(0);
-            setAiMatchDeployed(false);
-            setView("menu");
-          });
-        }}
+        onCancel={cancelMatchmaking}
       />
-    );
-  } else {
-    content = (
+    ) : (
       <MainMenu
         language={settings.language}
         nickname={guestNickname || "Guest_00"}
         particleCount={particleCount}
         onOpenSettings={() => runScreenTransition("LOADING", () => setView("settings"))}
-        onQueueStart={(mode) => {
-          runScreenTransition("MATCHMAKING", () => {
-            setQueueMode(mode);
-            setView("matchmaking");
-          });
-        }}
-        onStartGame={(mode) => runScreenTransition("LOADING", () => setSelectedMode(mode))}
+        onQueueStart={beginMatchmaking}
+        onStartGame={(mode) => runScreenTransition("LOADING", () => {
+          setActiveRoomStart(null);
+          setSelectedMode(mode);
+        })}
       />
     );
-  }
 
   return (
     <div style={shellStyle}>
