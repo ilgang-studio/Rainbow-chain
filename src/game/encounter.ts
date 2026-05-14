@@ -1,3 +1,5 @@
+import { rng } from "./rng";
+
 export interface EncounterModifiers {
   chainSpawnIntervalMultiplier?: number;
   chainSpawnCountBonus?: number;
@@ -42,7 +44,7 @@ export const ENCOUNTERS: EncounterConfig[] = [
 
 export function getRandomEncounter(): EncounterConfig | null {
   const poolSize = ENCOUNTERS.length + 1;
-  const roll = Math.floor(Math.random() * poolSize);
+  const roll = Math.floor(rng() * poolSize);
   if (roll === ENCOUNTERS.length) return null;
   return ENCOUNTERS[roll];
 }

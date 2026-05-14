@@ -51,10 +51,28 @@ export interface ErrorPayload {
   message: string;
 }
 
+export interface PlayerMovePayload {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  t: number;
+}
+
+export interface GameOverPayload {
+  winnerGuestId: string;
+}
+
+export interface RoomEndPayload {
+  winnerGuestId: string;
+}
+
 export interface ClientToServerEvents {
   "queue:join": (payload: QueueJoinPayload) => void;
   "queue:cancel": () => void;
   "room:ready": (payload: RoomReadyPayload) => void;
+  "player:move": (payload: PlayerMovePayload) => void;
+  "game:over": (payload: GameOverPayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -64,5 +82,7 @@ export interface ServerToClientEvents {
   "match:found": (payload: MatchFoundPayload) => void;
   "match:ai_fallback": (payload: MatchAiFallbackPayload) => void;
   "room:start": (payload: RoomStartPayload) => void;
+  "player:moved": (payload: PlayerMovePayload) => void;
+  "room:end": (payload: RoomEndPayload) => void;
   "error": (payload: ErrorPayload) => void;
 }

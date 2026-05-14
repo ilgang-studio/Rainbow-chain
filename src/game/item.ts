@@ -2,6 +2,7 @@
 // 각 아레나에 1개씩 생성, 획득 후 일정 시간 뒤 재생성
 
 import type { Arena } from "./arena";
+import { rng } from "./rng";
 
 export interface Item {
   x: number;
@@ -19,8 +20,8 @@ const ITEM_COLOR    = "#00ffcc";
 function randomPos(arena: Arena): { x: number; y: number } {
   const pad = Math.min(arena.w, arena.h) * 0.18;
   return {
-    x: arena.x + pad + Math.random() * (arena.w - pad * 2),
-    y: arena.y + pad + Math.random() * (arena.h - pad * 2),
+    x: arena.x + pad + rng() * (arena.w - pad * 2),
+    y: arena.y + pad + rng() * (arena.h - pad * 2),
   };
 }
 

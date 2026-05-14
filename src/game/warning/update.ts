@@ -1,4 +1,5 @@
 import type { Arena } from "../arena";
+import { rng } from "../rng";
 import type { EncounterConfig } from "../encounter";
 import type { Player } from "../player";
 import {
@@ -26,13 +27,13 @@ function spawnCount(gameTime: number): number {
 }
 
 function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig | null): void {
-  const orientation: Orientation = Math.random() < 0.5 ? "horizontal" : "vertical";
+  const orientation: Orientation = rng() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
   let centerPos = orientation === "vertical"
-    ? arena.x + pad + Math.random() * (arena.w - pad * 2)
-    : arena.y + pad + Math.random() * (arena.h - pad * 2);
-  const direction: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
-  const turnDir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+    ? arena.x + pad + rng() * (arena.w - pad * 2)
+    : arena.y + pad + rng() * (arena.h - pad * 2);
+  const direction: 1 | -1 = rng() < 0.5 ? 1 : -1;
+  const turnDir: 1 | -1 = rng() < 0.5 ? 1 : -1;
   const isVert = orientation === "vertical";
 
   const fakePos = centerPos;
@@ -45,7 +46,7 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounte
   const base = isVert ? arena.y : arena.x;
   const adjBase = base + LINK_R;
   const adjFullLen = fullLen - 2 * LINK_R;
-  const turnRatio = 0.4 + Math.random() * 0.2;
+  const turnRatio = 0.4 + rng() * 0.2;
 
   let turnPoint: number;
   let seg1Len: number;
@@ -237,7 +238,7 @@ export function updateWarnings(
     }
     const toSpawn = Math.min(count, MAX_ZONES_PER_ARENA - existing);
     for (let n = 0; n < toSpawn; n++) {
-      const t = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
+      const t = CHAIN_TYPE_IDS[Math.floor(rng() * CHAIN_TYPE_IDS.length)];
       spawnZone(i as 0 | 1, arenas[i], t, encounter);
     }
   }

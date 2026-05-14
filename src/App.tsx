@@ -819,6 +819,7 @@ export default function App() {
     };
 
     const handleMatchFound = ({ roomId, opponent }: MatchFoundPayload) => {
+      console.log("[match:found] received", roomId, opponent.nickname);
       setAiMatchDeployed(false);
       setMatchmakingStatus("MATCH FOUND");
       setMatchmakingDetail(`${opponent.nickname} linked. Synchronizing arena...`);
@@ -830,6 +831,7 @@ export default function App() {
     };
 
     const handleAiFallback = ({ roomId, opponent }: MatchAiFallbackPayload) => {
+      console.log("[match:ai_fallback] received", roomId, opponent.nickname);
       setAiMatchDeployed(true);
       setMatchmakingStatus("AI MATCH");
       setMatchmakingDetail(`${opponent.nickname} deployed.`);
@@ -841,6 +843,9 @@ export default function App() {
     };
 
     const handleRoomStart = (payload: RoomStartPayload) => {
+      console.log("[room:start] received", payload.roomId, "seed:", payload.seed);
+      // 진행 중인 전환 애니메이션(MATCHMAKING 등)이 room:start를 막지 않도록 먼저 취소
+      clearTransitionTimers();
       const isBotMatch = payload.players.some((player) => player.isBot);
       runScreenTransitionRef.current(isBotMatch ? "DEPLOYING AI OPPONENT" : "LOADING", () => {
         resetMatchmakingStateRef.current();
@@ -883,6 +888,7 @@ export default function App() {
       <GameCanvas
         mode={selectedMode}
         roomStart={activeRoomStart}
+        guestId={guestId}
         settings={settings}
         onExit={() => {
           runScreenTransition("LOADING", () => {

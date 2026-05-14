@@ -7,8 +7,18 @@ import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain
 import { createItems, updateItemsWithRate, drawItems, tryPickup } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing, drawEncounterIntro } from "./hud";
 import { createArenaAi, updateArenaAi } from "./ai";
+import { rng } from "./rng";
 
 const MAX_DT = 1 / 30;
+
+export interface OnlineGameOptions {
+  localIdx: 0 | 1;
+  myGuestId: string;
+  opponentGuestId: string;
+  emit: (ev: string, data: unknown) => void;
+  on: (ev: string, fn: (data: unknown) => void) => void;
+  off: (ev: string, fn: (data: unknown) => void) => void;
+}
 
 export function startGameLoop(
   canvas: HTMLCanvasElement,
@@ -19,6 +29,7 @@ export function startGameLoop(
     practiceMode?: boolean;
     onChainLaunch?: () => void;
     onRestartRequest?: () => void;
+    online?: OnlineGameOptions;
   },
   onGameOverChange?: (isGameOver: boolean) => void,
 ): () => void {
@@ -29,12 +40,37 @@ export function startGameLoop(
   let isGameOver  = false;
   let deadIdx: 0 | 1 | null = null;
   let gameTime = 0;
-  const enableAi = options?.enableAi ?? true;
+  const online = options?.online;
+  const enableAi = online ? false : (options?.enableAi ?? true);
   const practiceMode = options?.practiceMode ?? false;
   const arenaCount = practiceMode ? 1 : 2;
   const playerCount = practiceMode ? 1 : 2;
   const currentEncounter: EncounterConfig | null = getRandomEncounter();
   let encounterIntroTimer = 3;
+
+  // 온라인 모드: 상대 최신 위치를 매 tick 반영
+  let opponentX = players[online ? (1 - online.localIdx) as 0|1 : 1].x;
+  let opponentY = players[online ? (1 - online.localIdx) as 0|1 : 1].y;
+
+  const handlePlayerMoved = (data: unknown) => {
+    const { x, y } = data as { x: number; y: number };
+    opponentX = x;
+    opponentY = y;
+  };
+  const handleRoomEnd = (data: unknown) => {
+    const { winnerGuestId } = data as { winnerGuestId: string };
+    if (isGameOver) return;
+    isGameOver = true;
+    deadIdx = winnerGuestId === online?.myGuestId
+      ? (1 - online.localIdx) as 0 | 1  // 내가 이김 → 상대(deadIdx)가 죽음
+      : online!.localIdx;                // 상대가 이김 → 내가(deadIdx) 죽음
+    onGameOverChange?.(true);
+  };
+
+  if (online) {
+    online.on("player:moved", handlePlayerMoved);
+    online.on("room:end", handleRoomEnd);
+  }
 
   // FPS 계산: 1초 단위 샘플링
   let fpsDisplay  = 0;
@@ -189,6 +225,12 @@ export function startGameLoop(
       isGameOver = true;
       deadIdx    = chain.arenaIdx;
       onGameOverChange?.(true);
+      if (online) {
+        const winnerGuestId = deadIdx === online.localIdx
+          ? online.opponentGuestId  // 내가 죽음 → 상대 승
+          : online.myGuestId;       // 상대가 죽음 → 내가 승
+        online.emit("game:over", { winnerGuestId });
+      }
       return;
     }
   }
@@ -248,9 +290,11 @@ export function startGameLoop(
 
       // ── 아이템 획득 판정 ───────────────────
       for (let i = 0; i < arenaCount; i++) {
+        // 온라인: 자기 아레나 아이템만 직접 판정 (상대 아레나는 상대 클라이언트가 처리)
+        if (online && i !== online.localIdx) continue;
         if (!players[i].hasChain && tryPickup(items[i], players[i])) {
           players[i].hasChain  = true;
-          players[i].chainType = CHAIN_TYPE_IDS[Math.floor(Math.random() * CHAIN_TYPE_IDS.length)];
+          players[i].chainType = CHAIN_TYPE_IDS[Math.floor(rng() * CHAIN_TYPE_IDS.length)];
         }
       }
 
@@ -261,15 +305,26 @@ export function startGameLoop(
       }, currentEncounter);
 
       // ── 플레이어 이동 ──────────────────────
-      updatePlayer(players[0], dt, arenas[0]);
-      if (enableAi) {
-        const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], arenas[0], items[1]);
-        if (aiUseChain && players[1].hasChain) {
-          players[1].hasChain = false;
-          fireChain(0, arenas, players[1].chainType, currentEncounter);
+      if (online) {
+        // 온라인: 로컬 플레이어만 키보드로 이동; 상대는 수신 위치로 갱신
+        updatePlayer(players[online.localIdx], dt, arenas[online.localIdx]);
+        const oppIdx = (1 - online.localIdx) as 0 | 1;
+        players[oppIdx].x = opponentX;
+        players[oppIdx].y = opponentY;
+        // 내 위치 전송
+        const lp = players[online.localIdx];
+        online.emit("player:move", { x: lp.x, y: lp.y, vx: 0, vy: 0, t: Date.now() });
+      } else {
+        updatePlayer(players[0], dt, arenas[0]);
+        if (enableAi) {
+          const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], arenas[0], items[1]);
+          if (aiUseChain && players[1].hasChain) {
+            players[1].hasChain = false;
+            fireChain(0, arenas, players[1].chainType, currentEncounter);
+          }
+        } else if (!practiceMode) {
+          updatePlayer(players[1], dt, arenas[1]);
         }
-      } else if (!practiceMode) {
-        updatePlayer(players[1], dt, arenas[1]);
       }
 
       // ── 충돌 판정 ──────────────────────────
@@ -301,5 +356,9 @@ export function startGameLoop(
   return () => {
     cancelAnimationFrame(rafId);
     window.removeEventListener("keydown", onKey);
+    if (online) {
+      online.off("player:moved", handlePlayerMoved);
+      online.off("room:end", handleRoomEnd);
+    }
   };
 }

@@ -3,6 +3,8 @@ import { initInput } from "../game/input";
 import { createArenas } from "../game/arena";
 import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
+import { seedRng, resetRng } from "../game/rng";
+import { socket } from "../network/socket";
 import type { RoomStartPayload } from "../network/events";
 import type { AppSettings } from "../settings";
 import chainSfxTrack from "../assets/Metal-chain.mp3";
@@ -12,11 +14,13 @@ type GameMode = "casual" | "practice" | "double";
 export default function GameCanvas({
   mode = "casual",
   roomStart,
+  guestId,
   settings,
   onExit,
 }: {
   mode?: GameMode;
   roomStart?: RoomStartPayload | null;
+  guestId?: string;
   settings?: AppSettings;
   onExit?: () => void;
 }) {
@@ -52,37 +56,66 @@ export default function GameCanvas({
     resize();
     window.addEventListener("resize", resize);
 
+    console.log("[GameCanvas] entering", { mode, roomId: roomStart?.roomId ?? "local" });
+
     // 초기화 순서: input → arenas → players → gameLoop
     const cleanupInput = initInput();
     const arenas  = createArenas(canvas.width, canvas.height, mode);
+
+    // 온라인 모드 판별
+    const isOnline = mode === "casual" && roomStart != null && guestId != null;
+    const localIdx = isOnline
+      ? (roomStart!.players.findIndex((p) => p.guestId === guestId) as 0 | 1)
+      : 0;
+    const opponentPlayer = isOnline
+      ? roomStart!.players.find((p) => p.guestId !== guestId)
+      : null;
+
+    if (isOnline) seedRng(roomStart!.seed);
+
     const players = createPlayers(
       arenas,
       mode === "double"
-        ? {
-            up: "w",
-            down: "s",
-            left: "a",
-            right: "d",
-            use: "q",
-          }
+        ? { up: "w", down: "s", left: "a", right: "d", use: "q" }
         : settings?.controls,
     );
     if (mode === "double") {
       players[1].useKey = "/";
     }
+    // 온라인에서 localIdx=1이면 유저 키를 player[1]에 적용
+    if (isOnline && localIdx === 1 && settings?.controls) {
+      const c = settings.controls;
+      players[1].keys = { up: c.up, down: c.down, left: c.left, right: c.right };
+      players[1].useKey = c.use;
+    }
+
+    // socket을 any로 캐스트해 이벤트 이름 동적 전달 허용
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sock = socket as any;
+    const onlineOptions = isOnline && opponentPlayer ? {
+      localIdx,
+      myGuestId: guestId!,
+      opponentGuestId: opponentPlayer.guestId,
+      emit: (ev: string, data: unknown) => sock.emit(ev, data),
+      on:   (ev: string, fn: (d: unknown) => void) => sock.on(ev, fn),
+      off:  (ev: string, fn: (d: unknown) => void) => sock.off(ev, fn),
+    } : undefined;
+
     const cleanupLoop = startGameLoop(canvas, players, arenas, {
-      enableAi: mode === "casual",
+      enableAi: mode === "casual" && !isOnline,
       practiceMode: mode === "practice",
       onChainLaunch: playChainSfx,
       onRestartRequest: restartGame,
+      online: onlineOptions,
     }, setGameOver);
 
     return () => {
       window.removeEventListener("resize", resize);
       cleanupInput();
       cleanupLoop();
+      if (isOnline) resetRng();
     };
-  }, [mode, settings, runId]);
+  }, [mode, settings, runId, guestId, roomStart]);
 
   return (
     <div
