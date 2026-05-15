@@ -6,10 +6,12 @@ import type {
   MatchFoundPayload,
   QueueJoinPayload,
   QueueTickPayload,
+
   RoomStartPayload,
 } from "./network/events";
 import { socket } from "./network/socket";
 import { DEFAULT_SETTINGS, type AppSettings } from "./settings";
+import { setLocale, t } from "./i18n";
 import battleTrackA from "./assets/Nervous Footsteps.mp3";
 import battleTrackB from "./assets/Submerged Split.mp3";
 import battleTrackC from "./assets/Tilted Piano Room.mp3";
@@ -209,7 +211,7 @@ function GuestNicknameModal({
           onConfirm();
         }}
       >
-        <p className="guest-modal__title">Please write your nickname.</p>
+        <p className="guest-modal__title">{t("enterNickname")}</p>
         <input
           autoFocus
           maxLength={8}
@@ -220,7 +222,7 @@ function GuestNicknameModal({
           spellCheck={false}
         />
         <button type="submit" className="guest-modal__button">
-          start
+          {t("start")}
         </button>
       </form>
     </div>
@@ -228,29 +230,25 @@ function GuestNicknameModal({
 }
 
 function MainMenu({
-  language,
   nickname,
   particleCount,
   onOpenSettings,
   onQueueStart,
   onStartGame,
 }: {
-  language: AppSettings["language"];
   nickname: string;
   particleCount: number;
   onOpenSettings: () => void;
   onQueueStart: (mode: QueueMode) => void;
   onStartGame: (mode: MenuMode) => void;
 }) {
-  const title = language === "ko" ? "레인보우-체인" : "Rainbow-chain";
-
   return (
     <main className="menu-shell">
       <section className="menu-frame" aria-label="Main menu">
         <MenuBackground particleCount={particleCount} />
 
         <header className="menu-header">
-          <h1 className="menu-title">{title}</h1>
+          <h1 className="menu-title">Rainbow-chain</h1>
           <div className="menu-nickname">{nickname}</div>
         </header>
 
@@ -273,7 +271,7 @@ function MainMenu({
                   onStartGame(item.id);
                 }}
               >
-                <span className="menu-button-label">{item.label.toLowerCase()}</span>
+                <span className="menu-button-label">{t(item.id)}</span>
               </button>
             ))}
           </div>
@@ -317,14 +315,14 @@ function MatchmakingView({
 
         <section className="matchmaking-body">
           <div className="matchmaking-card">
-            <div className="matchmaking-label">CASUAL MATCHMAKING</div>
+            <div className="matchmaking-label">{t("casualMatchmaking")}</div>
             <div className={`matchmaking-status ${aiDeployed ? "is-ready" : ""}`}>
               {statusLabel}
             </div>
             <div className="matchmaking-detail">{detailLabel}</div>
             {canCancel ? (
               <button type="button" className="matchmaking-cancel" onClick={onCancel}>
-                cancel
+                {t("cancel")}
               </button>
             ) : null}
           </div>
@@ -359,17 +357,17 @@ function SettingsView({
         <MenuBackground particleCount={particleCount} />
 
         <header className="menu-header">
-          <h1 className="menu-title">Settings</h1>
+          <h1 className="menu-title">{t("settingsTitle")}</h1>
           <button type="button" className="settings-back" onClick={onBack}>
-            back
+            {t("back")}
           </button>
         </header>
 
         <section className="settings-grid">
           <section className="settings-card">
-            <h2 className="settings-heading">Nickname</h2>
+            <h2 className="settings-heading">{t("nicknameSetting")}</h2>
             <label className="settings-input-row">
-              <span className="settings-label">Guest Name</span>
+              <span className="settings-label">{t("guestName")}</span>
               <input
                 type="text"
                 maxLength={8}
@@ -382,23 +380,23 @@ function SettingsView({
           </section>
 
           <section className="settings-card">
-            <h2 className="settings-heading">Language</h2>
+            <h2 className="settings-heading">{t("languageSetting")}</h2>
             <div className="settings-segment">
-              {(["en", "ko"] as const).map((language) => (
+              {(["en", "ko", "ja", "zh-CN"] as const).map((lang) => (
                 <button
-                  key={language}
+                  key={lang}
                   type="button"
-                  className={`settings-pill ${settings.language === language ? "is-active" : ""}`}
-                  onClick={() => onChange({ ...settings, language })}
+                  className={`settings-pill ${settings.language === lang ? "is-active" : ""}`}
+                  onClick={() => onChange({ ...settings, language: lang })}
                 >
-                  {language === "en" ? "English" : "Korean"}
+                  {{ en: "English", ko: "한국어", ja: "日本語", "zh-CN": "中文" }[lang]}
                 </button>
               ))}
             </div>
           </section>
 
           <section className="settings-card settings-card--wide">
-            <h2 className="settings-heading">Key Settings</h2>
+            <h2 className="settings-heading">{t("keySettings")}</h2>
             <div className="settings-key-grid">
               {(Object.entries(settings.controls) as [ControlKey, string][]).map(([key, value]) => (
                 <div key={key} className="settings-key-row">
@@ -408,7 +406,7 @@ function SettingsView({
                     className={`settings-key-button ${listeningKey === key ? "is-listening" : ""}`}
                     onClick={() => onStartListening(key)}
                   >
-                    {listeningKey === key ? "press key..." : formatKeyLabel(value)}
+                    {listeningKey === key ? t("pressKey") : formatKeyLabel(value)}
                   </button>
                 </div>
               ))}
@@ -416,7 +414,7 @@ function SettingsView({
           </section>
 
           <section className="settings-card">
-            <h2 className="settings-heading">Sound</h2>
+            <h2 className="settings-heading">{t("sound")}</h2>
             <label className="settings-slider-row">
               <span className="settings-label">BGM</span>
               <input
@@ -440,9 +438,9 @@ function SettingsView({
           </section>
 
           <section className="settings-card">
-            <h2 className="settings-heading">Glow / Particle</h2>
+            <h2 className="settings-heading">{t("glowParticle")}</h2>
             <div className="settings-group">
-              <span className="settings-label">Glow</span>
+              <span className="settings-label">{t("glow")}</span>
               <div className="settings-segment">
                 {(["low", "medium", "high"] as const).map((value) => (
                   <button
@@ -457,7 +455,7 @@ function SettingsView({
               </div>
             </div>
             <div className="settings-group">
-              <span className="settings-label">Particle</span>
+              <span className="settings-label">{t("particle")}</span>
               <div className="settings-segment">
                 {(["low", "medium", "high"] as const).map((value) => (
                   <button
@@ -481,6 +479,9 @@ function SettingsView({
 export default function App() {
   const storedGuestNickname = readStoredGuestNickname();
   const storedGuestId = readStoredGuestId();
+  const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
+  // 언어 변경 시 즉시 locale 동기화 (렌더 전에 실행되므로 t() 호출이 항상 현재 언어 반영)
+  setLocale(settings.language);
   const [selectedMode, setSelectedMode] = useState<MenuMode | null>(null);
   const [view, setView] = useState<ViewState>("menu");
   const [queueSeconds, setQueueSeconds] = useState(0);
@@ -488,7 +489,6 @@ export default function App() {
   const [matchmakingStatus, setMatchmakingStatus] = useState("MATCHMAKING");
   const [matchmakingDetail, setMatchmakingDetail] = useState("Searching for opponent...");
   const [activeRoomStart, setActiveRoomStart] = useState<RoomStartPayload | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
   const [listeningKey, setListeningKey] = useState<ControlKey | null>(null);
   const [guestId, setGuestId] = useState(storedGuestId);
   const [guestNickname, setGuestNickname] = useState(storedGuestNickname);
@@ -705,8 +705,8 @@ export default function App() {
     pendingQueueJoinRef.current = null;
     setQueueSeconds(0);
     setAiMatchDeployed(false);
-    setMatchmakingStatus("MATCHMAKING");
-    setMatchmakingDetail("Searching for opponent...");
+    setMatchmakingStatus(t("matchmaking"));
+    setMatchmakingDetail(t("searchingOpponent"));
   };
 
   const ensureGuestIdentity = () => {
@@ -745,7 +745,7 @@ export default function App() {
 
   const emitQueueJoin = (payload: QueueJoinPayload) => {
     pendingQueueJoinRef.current = payload;
-    setMatchmakingDetail("Connecting to matchmaking server...");
+    setMatchmakingDetail(t("connectingToServer"));
 
     if (socket.connected) {
       socket.emit("queue:join", payload);
@@ -766,11 +766,30 @@ export default function App() {
       guestId: identity.guestId,
     };
 
-    runScreenTransition("MATCHMAKING", () => {
+    runScreenTransition(t("matchmaking"), () => {
       setView("matchmaking");
       emitQueueJoin(payload);
     });
   };
+
+  // 게임 중 → 새 큐로 이동 (리매치 timeout / opponent:left 시)
+  const goToMatchmakingFromGame = () => {
+    const identity = ensureGuestIdentity();
+    const payload: QueueJoinPayload = {
+      mode: "casual",
+      nickname: identity.nickname,
+      guestId: identity.guestId,
+    };
+    resetMatchmakingState();
+    clearTransitionTimers();
+    runScreenTransition(t("searching"), () => {
+      setActiveRoomStart(null);
+      setSelectedMode(null);
+      setView("matchmaking");
+      emitQueueJoin(payload);
+    });
+  };
+
 
   const cancelMatchmaking = () => {
     clearRoomReadyTimer();
@@ -782,7 +801,7 @@ export default function App() {
       socket.disconnect();
     }
 
-    runScreenTransition("LOADING", () => {
+    runScreenTransition(t("loading"), () => {
       resetMatchmakingState();
       setView("menu");
     });
@@ -804,8 +823,8 @@ export default function App() {
     const handleQueueJoined = () => {
       setQueueSeconds(0);
       setAiMatchDeployed(false);
-      setMatchmakingStatus("MATCHMAKING");
-      setMatchmakingDetail("Searching for opponent...");
+      setMatchmakingStatus(t("matchmaking"));
+      setMatchmakingDetail(t("searchingOpponent"));
     };
 
     const handleQueueTick = ({ elapsed }: QueueTickPayload) => {
@@ -821,7 +840,7 @@ export default function App() {
     const handleMatchFound = ({ roomId, opponent }: MatchFoundPayload) => {
       console.log("[match:found] received", roomId, opponent.nickname);
       setAiMatchDeployed(false);
-      setMatchmakingStatus("MATCH FOUND");
+      setMatchmakingStatus(t("matchFound"));
       setMatchmakingDetail(`${opponent.nickname} linked. Synchronizing arena...`);
       clearRoomReadyTimer();
       roomReadyTimerRef.current = window.setTimeout(() => {
@@ -833,7 +852,7 @@ export default function App() {
     const handleAiFallback = ({ roomId, opponent }: MatchAiFallbackPayload) => {
       console.log("[match:ai_fallback] received", roomId, opponent.nickname);
       setAiMatchDeployed(true);
-      setMatchmakingStatus("AI MATCH");
+      setMatchmakingStatus(t("aiMatch"));
       setMatchmakingDetail(`${opponent.nickname} deployed.`);
       clearRoomReadyTimer();
       roomReadyTimerRef.current = window.setTimeout(() => {
@@ -844,10 +863,14 @@ export default function App() {
 
     const handleRoomStart = (payload: RoomStartPayload) => {
       console.log("[room:start] received", payload.roomId, "seed:", payload.seed);
-      // 진행 중인 전환 애니메이션(MATCHMAKING 등)이 room:start를 막지 않도록 먼저 취소
       clearTransitionTimers();
+      // 리매치: 이미 게임 뷰에 있으면 화면 전환 없이 room 데이터만 교체
+      if (viewRef.current === "game") {
+        setActiveRoomStart(payload);
+        return;
+      }
       const isBotMatch = payload.players.some((player) => player.isBot);
-      runScreenTransitionRef.current(isBotMatch ? "DEPLOYING AI OPPONENT" : "LOADING", () => {
+      runScreenTransitionRef.current(isBotMatch ? t("deployingAi") : t("loading"), () => {
         resetMatchmakingStateRef.current();
         setActiveRoomStart(payload);
         setView("menu");
@@ -891,12 +914,13 @@ export default function App() {
         guestId={guestId}
         settings={settings}
         onExit={() => {
-          runScreenTransition("LOADING", () => {
+          runScreenTransition(t("loading"), () => {
             setActiveRoomStart(null);
             setSelectedMode(null);
             setView("menu");
           });
         }}
+        onGoToQueue={goToMatchmakingFromGame}
       />
     ) : view === "settings" ? (
       <SettingsView
@@ -906,7 +930,7 @@ export default function App() {
         particleCount={particleCount}
         onBack={() => {
           setListeningKey(null);
-          runScreenTransition("LOADING", () => setView("menu"));
+          runScreenTransition(t("loading"), () => setView("menu"));
         }}
         onChange={setSettings}
         onChangeNickname={updateGuestNickname}
@@ -925,12 +949,11 @@ export default function App() {
       />
     ) : (
       <MainMenu
-        language={settings.language}
         nickname={guestNickname || "Guest_00"}
         particleCount={particleCount}
-        onOpenSettings={() => runScreenTransition("LOADING", () => setView("settings"))}
+        onOpenSettings={() => runScreenTransition(t("loading"), () => setView("settings"))}
         onQueueStart={beginMatchmaking}
-        onStartGame={(mode) => runScreenTransition("LOADING", () => {
+        onStartGame={(mode) => runScreenTransition(t("loading"), () => {
           setActiveRoomStart(null);
           setSelectedMode(mode);
         })}

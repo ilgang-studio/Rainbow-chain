@@ -41,7 +41,7 @@ export function startGameLoop(
   let deadIdx: 0 | 1 | null = null;
   let gameTime = 0;
   const online = options?.online;
-  const enableAi = online ? false : (options?.enableAi ?? true);
+  const enableAi = options?.enableAi ?? !online;
   const practiceMode = options?.practiceMode ?? false;
   const arenaCount = practiceMode ? 1 : 2;
   const playerCount = practiceMode ? 1 : 2;
@@ -236,13 +236,6 @@ export function startGameLoop(
   }
 
   const onKey = (e: KeyboardEvent) => {
-    // 재시작
-    if (e.key === "r" || e.key === "R") {
-      if (isGameOver) {
-        options?.onRestartRequest?.();
-      }
-      return;
-    }
     if (isGameOver) return;
 
     // 체인 발동: 해당 플레이어가 체인 보유 중일 때만
@@ -309,8 +302,24 @@ export function startGameLoop(
         // 온라인: 로컬 플레이어만 키보드로 이동; 상대는 수신 위치로 갱신
         updatePlayer(players[online.localIdx], dt, arenas[online.localIdx]);
         const oppIdx = (1 - online.localIdx) as 0 | 1;
-        players[oppIdx].x = opponentX;
-        players[oppIdx].y = opponentY;
+        if (enableAi) {
+          const aiUseChain = updateArenaAi(
+            arenaAi,
+            dt,
+            players[oppIdx],
+            players[online.localIdx],
+            arenas[oppIdx],
+            arenas[online.localIdx],
+            items[oppIdx],
+          );
+          if (aiUseChain && players[oppIdx].hasChain) {
+            players[oppIdx].hasChain = false;
+            fireChain(online.localIdx, arenas, players[oppIdx].chainType, currentEncounter);
+          }
+        } else {
+          players[oppIdx].x = opponentX;
+          players[oppIdx].y = opponentY;
+        }
         // 내 위치 전송
         const lp = players[online.localIdx];
         online.emit("player:move", { x: lp.x, y: lp.y, vx: 0, vy: 0, t: Date.now() });

@@ -9,16 +9,16 @@ export interface EncounterModifiers {
 
 export interface EncounterConfig {
   id: "chainStorm" | "itemFever" | "overclock";
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   modifiers: EncounterModifiers;
 }
 
 export const ENCOUNTERS: EncounterConfig[] = [
   {
     id: "chainStorm",
-    name: "Chain Storm",
-    description: "Chains are produced faster across the arena.",
+    nameKey: "encounter.chainStorm.name",
+    descriptionKey: "encounter.chainStorm.description",
     modifiers: {
       chainSpawnIntervalMultiplier: 0.68,
       chainSpawnCountBonus: 1,
@@ -26,25 +26,23 @@ export const ENCOUNTERS: EncounterConfig[] = [
   },
   {
     id: "itemFever",
-    name: "Item Fever",
-    description: "Items spawn more often for nonstop pickups.",
+    nameKey: "encounter.itemFever.name",
+    descriptionKey: "encounter.itemFever.description",
     modifiers: {
       itemRespawnRateMultiplier: 2.15,
     },
   },
   {
     id: "overclock",
-    name: "Overclock",
-    description: "Chains launch faster once the warning ends.",
+    nameKey: "encounter.overclock.name",
+    descriptionKey: "encounter.overclock.description",
     modifiers: {
       chainLaunchSpeedMultiplier: 1.4,
     },
   },
 ];
 
-export function getRandomEncounter(): EncounterConfig | null {
-  const poolSize = ENCOUNTERS.length + 1;
-  const roll = Math.floor(rng() * poolSize);
-  if (roll === ENCOUNTERS.length) return null;
-  return ENCOUNTERS[roll];
+export function getRandomEncounter(): EncounterConfig {
+  const roll = Math.floor(rng() * ENCOUNTERS.length);
+  return ENCOUNTERS[roll] ?? ENCOUNTERS[0];
 }

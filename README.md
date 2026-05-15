@@ -72,3 +72,13 @@ export default defineConfig([
 ])
 ```
 # Rainbow-chain
+
+## Environment
+
+Create a local env file before running the frontend:
+
+```bash
+cp .env.example .env.local
+```
+
+Set the socket server URL with `VITE_SOCKET_URL`.

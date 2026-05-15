@@ -67,22 +67,35 @@ export interface RoomEndPayload {
   winnerGuestId: string;
 }
 
+export interface RematchRequestPayload  { roomId: string; }
+export interface RematchCancelPayload   { roomId: string; }
+export interface RematchWaitingPayload  { roomId: string; }
+export interface RematchAcceptedPayload { roomId: string; seed: number; players: PublicRoomPlayer[]; }
+export type RematchTimeoutPayload = Record<string, never>;
+export type OpponentLeftPayload   = Record<string, never>;
+
 export interface ClientToServerEvents {
-  "queue:join": (payload: QueueJoinPayload) => void;
-  "queue:cancel": () => void;
-  "room:ready": (payload: RoomReadyPayload) => void;
-  "player:move": (payload: PlayerMovePayload) => void;
-  "game:over": (payload: GameOverPayload) => void;
+  "queue:join":       (payload: QueueJoinPayload) => void;
+  "queue:cancel":     () => void;
+  "room:ready":       (payload: RoomReadyPayload) => void;
+  "player:move":      (payload: PlayerMovePayload) => void;
+  "game:over":        (payload: GameOverPayload) => void;
+  "rematch:request":  (payload: RematchRequestPayload) => void;
+  "rematch:cancel":   (payload: RematchCancelPayload) => void;
 }
 
 export interface ServerToClientEvents {
-  "queue:joined": (payload: QueueJoinedPayload) => void;
-  "queue:tick": (payload: QueueTickPayload) => void;
-  "queue:cancelled": (payload: QueueCancelledPayload) => void;
-  "match:found": (payload: MatchFoundPayload) => void;
-  "match:ai_fallback": (payload: MatchAiFallbackPayload) => void;
-  "room:start": (payload: RoomStartPayload) => void;
-  "player:moved": (payload: PlayerMovePayload) => void;
-  "room:end": (payload: RoomEndPayload) => void;
-  "error": (payload: ErrorPayload) => void;
+  "queue:joined":     (payload: QueueJoinedPayload) => void;
+  "queue:tick":       (payload: QueueTickPayload) => void;
+  "queue:cancelled":  (payload: QueueCancelledPayload) => void;
+  "match:found":      (payload: MatchFoundPayload) => void;
+  "match:ai_fallback":(payload: MatchAiFallbackPayload) => void;
+  "room:start":       (payload: RoomStartPayload) => void;
+  "player:moved":     (payload: PlayerMovePayload) => void;
+  "room:end":         (payload: RoomEndPayload) => void;
+  "rematch:waiting":  (payload: RematchWaitingPayload) => void;
+  "rematch:accepted": (payload: RematchAcceptedPayload) => void;
+  "rematch:timeout":  (payload: RematchTimeoutPayload) => void;
+  "opponent:left":    (payload: OpponentLeftPayload) => void;
+  "error":            (payload: ErrorPayload) => void;
 }

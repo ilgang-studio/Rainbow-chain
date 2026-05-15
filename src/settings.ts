@@ -7,7 +7,7 @@ export interface ControlSettings {
 }
 
 export interface AppSettings {
-  language: "en" | "ko";
+  language: "en" | "ko" | "ja" | "zh-CN";
   controls: ControlSettings;
   bgmVolume: number;
   sfxVolume: number;
