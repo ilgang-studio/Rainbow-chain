@@ -502,6 +502,7 @@ export default function App() {
   const retryAudioRef = useRef<(() => void) | null>(null);
   const audioResumeRef = useRef<(() => void) | null>(null);
   const viewRef = useRef<ViewState>(view);
+  const selectedModeRef = useRef<MenuMode | null>(selectedMode);
   const pendingQueueJoinRef = useRef<QueueJoinPayload | null>(null);
   const roomReadyTimerRef = useRef<number | null>(null);
   const resetMatchmakingStateRef = useRef<() => void>(() => {});
@@ -545,6 +546,10 @@ export default function App() {
   useEffect(() => {
     viewRef.current = view;
   }, [view]);
+
+  useEffect(() => {
+    selectedModeRef.current = selectedMode;
+  }, [selectedMode]);
 
   const confirmGuestNickname = () => {
     const nextNickname = saveGuestNickname(nicknameInput);
@@ -865,7 +870,7 @@ export default function App() {
       console.log("[room:start] received", payload.roomId, "seed:", payload.seed);
       clearTransitionTimers();
       // 리매치: 이미 게임 뷰에 있으면 화면 전환 없이 room 데이터만 교체
-      if (viewRef.current === "game") {
+      if (selectedModeRef.current !== null) {
         setActiveRoomStart(payload);
         return;
       }
