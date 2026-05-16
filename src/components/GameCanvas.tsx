@@ -118,9 +118,9 @@ export default function GameCanvas({
   const opponentIsBot = opponentPlayer?.isBot ?? false;
   const isRoundRematchable = isOnline && !opponentIsBot;
   const bo3Enabled = mode !== "practice";
-  const localPlayerIdx = (isOnline
-    ? roomStart!.players.findIndex((player) => player.guestId === guestId)
-    : 0) as 0 | 1;
+  const localPlayerIdx: 0 | 1 = isOnline
+    ? (roomStart!.players.findIndex((player) => player.guestId === guestId) === 1 ? 1 : 0)
+    : 0;
 
   const clearMatchTimers = () => {
     for (const timerId of matchTimersRef.current) window.clearTimeout(timerId);
@@ -395,6 +395,7 @@ export default function GameCanvas({
     : matchWinnerIdx === localPlayerIdx
       ? t("victory")
       : t("defeat");
+  const scoreLine = `${t("youShort")} ${myScore}  -  ${t("opponentShort")} ${opponentScore}`;
 
   const renderGameOverOverlay = () => {
     if (!gameOver || gameOverRoomId !== roomStart?.roomId) return null;
@@ -418,7 +419,7 @@ export default function GameCanvas({
           <p style={{ ...MSG_STYLE, fontSize: "42px", lineHeight: 1.05 }}>
             {roundWinnerIdx === localPlayerIdx ? t("victory") : t("defeat")}
           </p>
-          <p style={{ ...MSG_STYLE, fontSize: "20px" }}>{myScore} - {opponentScore}</p>
+          <p style={{ ...MSG_STYLE, fontSize: "20px" }}>{scoreLine}</p>
         </div>
       );
     }
@@ -454,7 +455,7 @@ export default function GameCanvas({
           <div style={containerStyle}>
             <p style={{ ...MSG_STYLE, fontSize: "15px", opacity: 0.72 }}>{t("finalScore")}</p>
             <p style={{ ...MSG_STYLE, fontSize: "42px", lineHeight: 1.05 }}>{finalOutcome}</p>
-            <p style={{ ...MSG_STYLE, fontSize: "22px" }}>{myScore} - {opponentScore}</p>
+            <p style={{ ...MSG_STYLE, fontSize: "22px" }}>{scoreLine}</p>
             <p style={MSG_STYLE}>{t("waitingForOpponent")}</p>
             <button type="button" style={{ ...BTN_STYLE, minWidth: "140px" }} onClick={() => onExit?.()}>
               {t("mainMenu")}
@@ -467,7 +468,7 @@ export default function GameCanvas({
         <div style={containerStyle}>
           <p style={{ ...MSG_STYLE, fontSize: "15px", opacity: 0.72 }}>{t("finalScore")}</p>
           <p style={{ ...MSG_STYLE, fontSize: "42px", lineHeight: 1.05 }}>{finalOutcome}</p>
-          <p style={{ ...MSG_STYLE, fontSize: "22px" }}>{myScore} - {opponentScore}</p>
+          <p style={{ ...MSG_STYLE, fontSize: "22px" }}>{scoreLine}</p>
           <div style={{ display: "flex", gap: "16px" }}>
             <button
               type="button"
@@ -521,6 +522,16 @@ export default function GameCanvas({
           }}
         >
           {t("round")} {roundNumber}
+        </div>
+        <div
+          style={{
+            color: "rgba(255,255,255,0.62)",
+            font: "bold 10px/1 monospace",
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+          }}
+        >
+          {t("youShort")} / {t("opponentShort")}
         </div>
         <div
           style={{

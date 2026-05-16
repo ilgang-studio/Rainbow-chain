@@ -25,8 +25,7 @@ const MAX_DT = 1 / 30;
 const AUTHORITATIVE_ITEM_SIZE = 13;
 const POSITION_SNAP_DISTANCE = 120;
 const OPPONENT_POSITION_LERP = 0.22;
-const LOCAL_CORRECTION_STRONG = 0.18;
-const LOCAL_CORRECTION_LIGHT = 0.08;
+const ITEM_PICKUP_RETRY_MS = 140;
 
 interface OnlineChainEffect {
   chainId: string;
@@ -91,7 +90,7 @@ export function startGameLoop(
   let latestBattleState: BattleStatePayload | null = null;
   let authoritativeItem: BattleItemSnapshot | null = null;
   const onlineChainEffects: OnlineChainEffect[] = [];
-  const requestedItemIds = new Set<string>();
+  const requestedItemAttempts = new Map<string, number>();
   let awaitingChainResolution = false;
   let serverClockOffsetMs = 0;
   const serverLaneWidth = battleConfig.worldWidth / 2;
@@ -206,7 +205,7 @@ export function startGameLoop(
       respawnAt: null,
       pickedByGuestId: null,
     };
-    requestedItemIds.delete(payload.itemId);
+    requestedItemAttempts.delete(payload.itemId);
   }
 
   function applyBattleState(payload: BattleStatePayload): void {
@@ -231,7 +230,7 @@ export function startGameLoop(
       }
     }
     if (!latestBattleState.item?.active) {
-      requestedItemIds.clear();
+      requestedItemAttempts.clear();
     }
   }
 
@@ -284,7 +283,7 @@ export function startGameLoop(
           respawnAt: payload.respawnAt,
           pickedByGuestId: payload.pickedByGuestId,
         };
-    requestedItemIds.delete(payload.itemId);
+    requestedItemAttempts.delete(payload.itemId);
     if (online && payload.pickedByGuestId === online.myGuestId) {
       players[online.localIdx].hasChain = true;
       players[online.localIdx].chainType = payload.chainType;
@@ -394,21 +393,6 @@ export function startGameLoop(
 
   function lerp(current: number, target: number, alpha: number): number {
     return current + (target - current) * alpha;
-  }
-
-  function applyAuthoritativeCorrection(player: Player, targetX: number, targetY: number): void {
-    const dx = targetX - player.x;
-    const dy = targetY - player.y;
-    const drift = Math.hypot(dx, dy);
-    if (drift <= 0.5) return;
-    if (drift >= POSITION_SNAP_DISTANCE) {
-      player.x = targetX;
-      player.y = targetY;
-      return;
-    }
-    const alpha = drift > 14 ? LOCAL_CORRECTION_STRONG : LOCAL_CORRECTION_LIGHT;
-    player.x = lerp(player.x, targetX, alpha);
-    player.y = lerp(player.y, targetY, alpha);
   }
 
   function getAimVector(player: Player, fallbackX: number, fallbackY: number): { dx: number; dy: number } {
@@ -764,30 +748,49 @@ export function startGameLoop(
     // ── 아레나 테두리 ────────────────────────
     for (let i = 0; i < arenaCount; i++) drawArena(ctx, arenas[i]);
 
-    if (!isGameOver) {
-      gameTime += dt;
-      if (currentEncounter) {
-        encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
+    gameTime += dt;
+    if (currentEncounter) {
+      encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
+    }
+
+    if (!useServerBattle) {
+      updateItemsWithRate(
+        items,
+        dt,
+        arenas,
+        currentEncounter?.modifiers.itemRespawnRateMultiplier ?? 1,
+      );
+    }
+
+    if (!useServerBattle || useDeterministicEncounterChains) {
+      updateWarnings(dt, arenas, players, gameTime, {
+        practiceMode,
+        onChainLaunch: options?.onChainLaunch,
+      }, currentEncounter);
+    }
+
+    for (let i = onlineChainEffects.length - 1; i >= 0; i--) {
+      if (onlineChainEffects[i].removeAt <= Date.now()) {
+        onlineChainEffects.splice(i, 1);
       }
+    }
+
+    if (!isGameOver) {
 
       // ── 아이템 업데이트 ────────────────────
-      if (!useServerBattle) {
-        updateItemsWithRate(
-          items,
-          dt,
-          arenas,
-          currentEncounter?.modifiers.itemRespawnRateMultiplier ?? 1,
-        );
-      }
-
       // ── 아이템 획득 판정 ───────────────────
       if (useServerBattle && online) {
         const localPlayer = players[online.localIdx];
-        if (authoritativeItem?.active && !requestedItemIds.has(authoritativeItem.itemId)) {
+        if (authoritativeItem?.active) {
           const dx = localPlayer.x - authoritativeItem.x;
           const dy = localPlayer.y - authoritativeItem.y;
-          if (Math.hypot(dx, dy) <= battleConfig.itemPickupRadius) {
-            requestedItemIds.add(authoritativeItem.itemId);
+          const nowMs = Date.now();
+          const lastAttemptAt = requestedItemAttempts.get(authoritativeItem.itemId) ?? 0;
+          if (
+            Math.hypot(dx, dy) <= battleConfig.itemPickupRadius
+            && nowMs - lastAttemptAt >= ITEM_PICKUP_RETRY_MS
+          ) {
+            requestedItemAttempts.set(authoritativeItem.itemId, nowMs);
             online.emit("item:pickup", { itemId: authoritativeItem.itemId, t: Date.now() });
           }
         }
@@ -799,20 +802,6 @@ export function startGameLoop(
             players[i].hasChain  = true;
             players[i].chainType = CHAIN_TYPE_IDS[Math.floor(rng() * CHAIN_TYPE_IDS.length)];
           }
-        }
-      }
-
-      // ── 경고 / 사슬 업데이트 ───────────────
-      if (!useServerBattle || useDeterministicEncounterChains) {
-        updateWarnings(dt, arenas, players, gameTime, {
-          practiceMode,
-          onChainLaunch: options?.onChainLaunch,
-        }, currentEncounter);
-      }
-
-      for (let i = onlineChainEffects.length - 1; i >= 0; i--) {
-        if (onlineChainEffects[i].removeAt <= Date.now()) {
-          onlineChainEffects.splice(i, 1);
         }
       }
 
@@ -847,13 +836,6 @@ export function startGameLoop(
           } else {
             players[oppIdx].x = lerp(players[oppIdx].x, opponentX, OPPONENT_POSITION_LERP);
             players[oppIdx].y = lerp(players[oppIdx].y, opponentY, OPPONENT_POSITION_LERP);
-          }
-        }
-        if (useServerBattle) {
-          const mySnapshot = getPlayerStateSnapshot(online.myGuestId);
-          if (mySnapshot) {
-            const mappedSelf = mapServerPointToClient(online.localIdx, mySnapshot.x, mySnapshot.y);
-            applyAuthoritativeCorrection(players[online.localIdx], mappedSelf.x, mappedSelf.y);
           }
         }
         // 내 위치 전송
