@@ -498,29 +498,24 @@ export default function GameCanvas({
       <div
         style={{
           position: "fixed",
-          top: "72px",
+          top: "82px",
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 18,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "4px",
+          gap: "8px",
           pointerEvents: "none",
-          minWidth: "148px",
-          padding: "10px 18px 12px",
-          background: "rgba(0,0,0,0.42)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 0 18px rgba(255,255,255,0.08)",
-          backdropFilter: "blur(6px)",
         }}
       >
         <div
           style={{
-            color: "rgba(255,255,255,0.92)",
-            font: "bold 14px/1 monospace",
-            letterSpacing: "0.24em",
-            textShadow: "0 0 10px rgba(255,255,255,0.28)",
+            color: "rgba(255,255,255,0.9)",
+            font: "bold 12px/1 monospace",
+            letterSpacing: "0.36em",
+            textTransform: "uppercase",
+            textShadow: "0 0 10px rgba(255,255,255,0.32)",
           }}
         >
           {t("round")} {roundNumber}
@@ -528,9 +523,9 @@ export default function GameCanvas({
         <div
           style={{
             color: "#fff",
-            font: "bold 28px/1 monospace",
-            letterSpacing: "0.16em",
-            textShadow: "0 0 14px rgba(255,255,255,0.42)",
+            font: "bold 24px/1 monospace",
+            letterSpacing: "0.2em",
+            textShadow: "0 0 16px rgba(255,255,255,0.5)",
           }}
         >
           {myScore} - {opponentScore}

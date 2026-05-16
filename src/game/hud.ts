@@ -22,10 +22,10 @@ export function drawTimer(ctx: CanvasRenderingContext2D, canvasWidth: number, ga
   ctx.save();
   ctx.textAlign    = "center";
   ctx.textBaseline = "top";
-  ctx.font         = "bold 28px monospace";
+  ctx.font         = "bold 30px monospace";
   ctx.fillStyle    = "#ffffff";
   ctx.shadowColor  = "#ffffff";
-  ctx.shadowBlur   = 12;
+  ctx.shadowBlur   = 18;
   ctx.fillText(label, canvasWidth / 2, 18);
   ctx.restore();
 }
