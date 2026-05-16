@@ -345,7 +345,7 @@ function MatchmakingView({
   elapsedSeconds,
   statusLabel,
   detailLabel,
-  canCancel,
+  actionLabel,
   aiDeployed,
   onCancel,
 }: {
@@ -354,7 +354,7 @@ function MatchmakingView({
   elapsedSeconds: number;
   statusLabel: string;
   detailLabel: string;
-  canCancel: boolean;
+  actionLabel: string;
   aiDeployed: boolean;
   onCancel: () => void;
 }) {
@@ -378,11 +378,9 @@ function MatchmakingView({
               {statusLabel}
             </div>
             <div className="matchmaking-detail">{detailLabel}</div>
-            {canCancel ? (
-              <button type="button" className="matchmaking-cancel" onClick={onCancel}>
-                {t("cancel")}
-              </button>
-            ) : null}
+            <button type="button" className="matchmaking-cancel" onClick={onCancel}>
+              {actionLabel}
+            </button>
           </div>
         </section>
       </section>
@@ -1013,7 +1011,7 @@ export default function App() {
         elapsedSeconds={queueSeconds}
         statusLabel={matchmakingStatus}
         detailLabel={matchmakingDetail}
-        canCancel={matchmakingStatus === "MATCHMAKING"}
+        actionLabel={matchmakingStatus === "QUEUE ERROR" ? t("mainMenu") : t("cancel")}
         aiDeployed={aiMatchDeployed}
         onCancel={cancelMatchmaking}
       />
