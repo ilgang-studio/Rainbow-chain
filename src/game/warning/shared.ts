@@ -1,3 +1,5 @@
+import type { ChainType } from "../../shared/battle";
+
 export type Orientation = "horizontal" | "vertical";
 export type Phase = "warning" | "flash" | "extending" | "active" | "exiting";
 export interface TrackPoint { x: number; y: number; }
@@ -87,6 +89,41 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
 };
 
 export const CHAIN_TYPE_IDS = Object.keys(CHAIN_CONFIGS);
+
+const SERVER_CHAIN_VISUALS: Record<ChainType, Partial<ChainConfig>> = {
+  red: {
+    warningColor: "#ff6b6b",
+    linkColor: "#ff9f9f",
+    bandHalfWidth: 34,
+    linkRadius: 5,
+  },
+  blue: {
+    warningColor: "#4d8dff",
+    linkColor: "#84b3ff",
+    bandHalfWidth: 34,
+    linkRadius: 5,
+  },
+  green: {
+    warningColor: "#25d98a",
+    linkColor: "#70ffbf",
+    bandHalfWidth: 34,
+    linkRadius: 5,
+  },
+  yellow: {
+    warningColor: "#ffd24d",
+    linkColor: "#ffe58d",
+    bandHalfWidth: 34,
+    linkRadius: 5,
+  },
+};
+
+export function getChainVisualConfig(chainType: string): ChainConfig {
+  const serverVisual = SERVER_CHAIN_VISUALS[chainType as ChainType];
+  if (serverVisual) {
+    return { ...CHAIN_CONFIGS.normal, ...serverVisual };
+  }
+  return CHAIN_CONFIGS[chainType] ?? CHAIN_CONFIGS.normal;
+}
 
 export interface Zone {
   orientation: Orientation;

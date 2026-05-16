@@ -7,6 +7,7 @@ import { startGameLoop } from "../game/gameLoop";
 import { seedRng, resetRng } from "../game/rng";
 import { socket } from "../network/socket";
 import type { RoomStartPayload } from "../network/events";
+import { DEFAULT_BATTLE_CONFIG } from "../shared/battle";
 import type { AppSettings } from "../settings";
 import chainSfxTrack from "../assets/Metal-chain.mp3";
 
@@ -129,9 +130,12 @@ export default function GameCanvas({
       void clip.play().catch(() => {});
     };
 
-    // 고정 논리 해상도 — CSS scale로 뷰포트에 맞춤
-    const LOGICAL_W = 1280;
-    const LOGICAL_H = 720;
+    const isOnline = mode === "casual" && roomStart != null && guestId != null;
+    const battleConfig = isOnline ? roomStart!.battleConfig : DEFAULT_BATTLE_CONFIG;
+
+    // 서버 authoritative 전투는 서버 월드 해상도를 그대로 사용
+    const LOGICAL_W = battleConfig.worldWidth;
+    const LOGICAL_H = battleConfig.worldHeight;
     canvas.width  = LOGICAL_W;
     canvas.height = LOGICAL_H;
 
@@ -153,8 +157,6 @@ export default function GameCanvas({
     const cleanupInput = initInput();
     const arenas  = createArenas(LOGICAL_W, LOGICAL_H, mode);
 
-    // 온라인 모드 판별
-    const isOnline = mode === "casual" && roomStart != null && guestId != null;
     const localIdx = isOnline
       ? (roomStart!.players.findIndex((p) => p.guestId === guestId) as 0 | 1)
       : 0;
@@ -198,6 +200,7 @@ export default function GameCanvas({
       onChainLaunch: playChainSfx,
       onRestartRequest: restartGame,
       online: onlineOptions,
+      battleConfig,
     }, (val: boolean) => {
       setGameOver(val);
       if (val) {

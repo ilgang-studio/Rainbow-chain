@@ -1,17 +1,5 @@
-export interface PublicRoomPlayer {
-  guestId: string;
-  nickname: string;
-  isBot: boolean;
-}
-
-// Frontend-local battle contract mirrors the server schema.
-// Keep these permissive until shared model types are imported into this repo.
-export interface BattleConfig {
-  [key: string]: unknown;
-}
-
-export type BattleStatus = string;
-export type ChainType = string;
+import type { PublicRoomPlayer } from "../shared/room";
+import type { BattleConfig, BattleStatus, ChainType } from "../shared/battle";
 
 export interface QueueJoinPayload {
   mode: "casual";

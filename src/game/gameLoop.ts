@@ -4,7 +4,7 @@ import { isKeyDown } from "./input";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
 import { getRandomEncounter, type EncounterConfig } from "./encounter";
-import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual } from "./warning/index";
+import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getChainVisualConfig, getPhaseCycleVisual } from "./warning/index";
 import { createItems, updateItemsWithRate, drawItems, tryPickup } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing, drawEncounterIntro } from "./hud";
 import { createArenaAi, updateArenaAi } from "./ai";
@@ -19,9 +19,14 @@ import type {
   ItemSpawnedPayload,
   PlayerStatePayload,
 } from "../network/events";
+import { DEFAULT_BATTLE_CONFIG, type BattleConfig } from "../shared/battle";
 
 const MAX_DT = 1 / 30;
 const AUTHORITATIVE_ITEM_SIZE = 13;
+const POSITION_SNAP_DISTANCE = 120;
+const OPPONENT_POSITION_LERP = 0.22;
+const LOCAL_CORRECTION_STRONG = 0.18;
+const LOCAL_CORRECTION_LIGHT = 0.08;
 
 interface OnlineChainEffect {
   chainId: string;
@@ -33,6 +38,9 @@ interface OnlineChainEffect {
   dy: number;
   phase: "warning" | "active";
   removeAt: number;
+  warningAt: number;
+  fireAt: number;
+  firedAt?: number;
 }
 
 export interface OnlineGameOptions {
@@ -54,6 +62,7 @@ export function startGameLoop(
     onChainLaunch?: () => void;
     onRestartRequest?: () => void;
     online?: OnlineGameOptions;
+    battleConfig?: BattleConfig;
   },
   onGameOverChange?: (isGameOver: boolean) => void,
 ): () => void {
@@ -68,6 +77,7 @@ export function startGameLoop(
   const enableAi = options?.enableAi ?? !online;
   const useServerBattle = Boolean(online && !enableAi);
   const practiceMode = options?.practiceMode ?? false;
+  const battleConfig = options?.battleConfig ?? DEFAULT_BATTLE_CONFIG;
   const arenaCount = practiceMode ? 1 : 2;
   const playerCount = practiceMode ? 1 : 2;
   const currentEncounter: EncounterConfig | null = useServerBattle ? null : getRandomEncounter();
@@ -77,6 +87,7 @@ export function startGameLoop(
   const onlineChainEffects: OnlineChainEffect[] = [];
   const requestedItemIds = new Set<string>();
   let awaitingChainResolution = false;
+  let serverClockOffsetMs = 0;
 
   // 온라인 모드: 상대 최신 위치를 매 tick 반영
   let opponentX = players[online ? (1 - online.localIdx) as 0|1 : 1].x;
@@ -88,17 +99,22 @@ export function startGameLoop(
     opponentY = y;
   };
   const handleRoomEnd = (data: unknown) => {
-    const { winnerGuestId } = data as { winnerGuestId: string };
+    const { winnerGuestId } = data as { winnerGuestId: string | null };
     if (isGameOver) return;
     isGameOver = true;
-    deadIdx = winnerGuestId === online?.myGuestId
-      ? (1 - online.localIdx) as 0 | 1  // 내가 이김 → 상대(deadIdx)가 죽음
-      : online!.localIdx;                // 상대가 이김 → 내가(deadIdx) 죽음
+    if (winnerGuestId == null || !online) {
+      deadIdx = online?.localIdx ?? 0;
+    } else {
+      deadIdx = winnerGuestId === online.myGuestId
+        ? (1 - online.localIdx) as 0 | 1
+        : online.localIdx;
+    }
     onGameOverChange?.(true);
   };
 
   const handleBattleState = (data: unknown) => {
     latestBattleState = data as BattleStatePayload;
+    serverClockOffsetMs = Date.now() - latestBattleState.serverTime;
     authoritativeItem = latestBattleState.item;
     if (online) {
       const mySnapshot = latestBattleState.players.find((player) => player.guestId === online.myGuestId);
@@ -122,17 +138,16 @@ export function startGameLoop(
   };
 
   const handlePlayerState = (data: unknown) => {
-    if (!online || !latestBattleState) return;
+    if (!online) return;
     const payload = data as PlayerStatePayload;
-    const snapshots = latestBattleState.players;
-    const snapshot = snapshots.find((player) => player.guestId === online.opponentGuestId);
+    opponentX = payload.x;
+    opponentY = payload.y;
+    const snapshot = latestBattleState?.players.find((player) => player.guestId === online.opponentGuestId);
     if (!snapshot) return;
     snapshot.x = payload.x;
     snapshot.y = payload.y;
     snapshot.hp = payload.hp;
     snapshot.score = payload.score;
-    opponentX = payload.x;
-    opponentY = payload.y;
   };
 
   const handleItemSpawned = (data: unknown) => {
@@ -179,9 +194,12 @@ export function startGameLoop(
     payload: ChainWarningPayload | ChainSpawnPayload,
     phase: "warning" | "active",
   ) => {
+    const fireAtLocal = toLocalTimeFromServer(payload.fireAt);
+    const firedAtLocal = "firedAt" in payload ? toLocalTimeFromServer(payload.firedAt) : undefined;
+    const activeVisualMs = Math.max(420, Math.round(battleConfig.chainWarningMs * 0.9));
     const removeAt = phase === "warning"
-      ? payload.fireAt + 150
-      : ("firedAt" in payload ? payload.firedAt : payload.fireAt) + 2200;
+      ? fireAtLocal + 150
+      : (firedAtLocal ?? fireAtLocal) + activeVisualMs;
     const existing = onlineChainEffects.find((effect) => effect.chainId === payload.chainId);
     if (existing) {
       existing.ownerGuestId = payload.ownerGuestId;
@@ -192,6 +210,9 @@ export function startGameLoop(
       existing.dy = payload.dy;
       existing.phase = phase;
       existing.removeAt = removeAt;
+      existing.warningAt = payload.warningAt;
+      existing.fireAt = payload.fireAt;
+      existing.firedAt = "firedAt" in payload ? payload.firedAt : undefined;
       return;
     }
     onlineChainEffects.push({
@@ -204,6 +225,9 @@ export function startGameLoop(
       dy: payload.dy,
       phase,
       removeAt,
+      warningAt: payload.warningAt,
+      fireAt: payload.fireAt,
+      firedAt: "firedAt" in payload ? payload.firedAt : undefined,
     });
   };
 
@@ -253,6 +277,33 @@ export function startGameLoop(
     return latestBattleState?.players.find((player) => player.guestId === guestId) ?? null;
   }
 
+  function toLocalTimeFromServer(serverTime: number): number {
+    return serverTime + serverClockOffsetMs;
+  }
+
+  function getApproxServerNow(): number {
+    return Date.now() - serverClockOffsetMs;
+  }
+
+  function lerp(current: number, target: number, alpha: number): number {
+    return current + (target - current) * alpha;
+  }
+
+  function applyAuthoritativeCorrection(player: Player, targetX: number, targetY: number): void {
+    const dx = targetX - player.x;
+    const dy = targetY - player.y;
+    const drift = Math.hypot(dx, dy);
+    if (drift <= 0.5) return;
+    if (drift >= POSITION_SNAP_DISTANCE) {
+      player.x = targetX;
+      player.y = targetY;
+      return;
+    }
+    const alpha = drift > 14 ? LOCAL_CORRECTION_STRONG : LOCAL_CORRECTION_LIGHT;
+    player.x = lerp(player.x, targetX, alpha);
+    player.y = lerp(player.y, targetY, alpha);
+  }
+
   function getAimVector(player: Player, fallbackX: number, fallbackY: number): { dx: number; dy: number } {
     let dx = 0;
     let dy = 0;
@@ -276,101 +327,113 @@ export function startGameLoop(
     item: BattleItemSnapshot | null,
   ): void {
     if (!item?.active) return;
+    const size = Math.max(AUTHORITATIVE_ITEM_SIZE, Math.round(battleConfig.itemPickupRadius * 0.2));
     drawItems(ctx, [{
       x: item.x,
       y: item.y,
-      size: AUTHORITATIVE_ITEM_SIZE,
+      size,
       arenaIdx: 0,
       active: true,
       respawnTimer: 0,
     }]);
   }
 
-  function getLineRectSegment(
+  function getRayCanvasSegment(
     originX: number,
     originY: number,
     dx: number,
     dy: number,
-    arena: Arena,
+    range: number,
+    canvasWidth: number,
+    canvasHeight: number,
   ): { x1: number; y1: number; x2: number; y2: number } | null {
-    const ts: number[] = [];
+    let maxT = Math.max(0, range);
     if (Math.abs(dx) > 0.0001) {
-      const leftT = (arena.x - originX) / dx;
-      const rightT = (arena.x + arena.w - originX) / dx;
-      const leftY = originY + leftT * dy;
-      const rightY = originY + rightT * dy;
-      if (leftY >= arena.y && leftY <= arena.y + arena.h) ts.push(leftT);
-      if (rightY >= arena.y && rightY <= arena.y + arena.h) ts.push(rightT);
+      maxT = Math.min(maxT, dx > 0 ? (canvasWidth - originX) / dx : (0 - originX) / dx);
     }
     if (Math.abs(dy) > 0.0001) {
-      const topT = (arena.y - originY) / dy;
-      const bottomT = (arena.y + arena.h - originY) / dy;
-      const topX = originX + topT * dx;
-      const bottomX = originX + bottomT * dx;
-      if (topX >= arena.x && topX <= arena.x + arena.w) ts.push(topT);
-      if (bottomX >= arena.x && bottomX <= arena.x + arena.w) ts.push(bottomT);
+      maxT = Math.min(maxT, dy > 0 ? (canvasHeight - originY) / dy : (0 - originY) / dy);
     }
-    if (ts.length < 2) return null;
-    ts.sort((a, b) => a - b);
-    const t1 = ts[0];
-    const t2 = ts[ts.length - 1];
+    if (!Number.isFinite(maxT) || maxT <= 0) return null;
     return {
-      x1: originX + dx * t1,
-      y1: originY + dy * t1,
-      x2: originX + dx * t2,
-      y2: originY + dy * t2,
+      x1: originX,
+      y1: originY,
+      x2: originX + dx * maxT,
+      y2: originY + dy * maxT,
     };
   }
 
   function drawServerChainEffect(
     ctx: CanvasRenderingContext2D,
-    arena: Arena,
     effect: OnlineChainEffect,
   ): void {
-    const cfg = CHAIN_CONFIGS[effect.chainType] ?? CHAIN_CONFIGS.normal;
+    const cfg = getChainVisualConfig(effect.chainType);
     const len = Math.hypot(effect.dx, effect.dy);
     if (len <= 0.0001) return;
     const dx = effect.dx / len;
     const dy = effect.dy / len;
-    const segment = getLineRectSegment(effect.originX, effect.originY, dx, dy, arena);
+    const segment = getRayCanvasSegment(
+      effect.originX,
+      effect.originY,
+      dx,
+      dy,
+      battleConfig.chainRange,
+      canvas.width,
+      canvas.height,
+    );
     if (!segment) return;
+    const approxServerNow = getApproxServerNow();
+    const warningDuration = Math.max(1, effect.fireAt - effect.warningAt);
+    const warningProgress = Math.max(0, Math.min(1, (approxServerNow - effect.warningAt) / warningDuration));
+    const activeVisualMs = Math.max(420, Math.round(battleConfig.chainWarningMs * 0.9));
+    const activeProgress = effect.firedAt == null
+      ? 0
+      : Math.max(0, Math.min(1, (approxServerNow - effect.firedAt) / activeVisualMs));
+    const beamLength = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
+    const drawLength = effect.phase === "warning"
+      ? beamLength * (0.24 + warningProgress * 0.76)
+      : beamLength;
+    const endX = segment.x1 + dx * drawLength;
+    const endY = segment.y1 + dy * drawLength;
+    const bandHalf = Math.max(18, battleConfig.chainHitRadius * 0.5, cfg.bandHalfWidth ?? 0);
+    const ringRadius = Math.max(4, Math.min(10, battleConfig.chainHitRadius * 0.08, cfg.linkRadius ?? 5));
+    const pulse = 0.72 + 0.28 * Math.sin(approxServerNow / 90);
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(arena.x, arena.y, arena.w, arena.h);
+    ctx.rect(0, 0, canvas.width, canvas.height);
     ctx.clip();
 
     if (effect.phase === "warning") {
-      const bandHalf = cfg.bandHalfWidth ?? 24;
-      ctx.globalAlpha = 0.2;
+      ctx.globalAlpha = 0.14 + warningProgress * 0.14;
       ctx.strokeStyle = cfg.warningColor;
       ctx.lineWidth = bandHalf * 2;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(segment.x2, segment.y2);
+      ctx.lineTo(endX, endY);
       ctx.stroke();
 
-      ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.72 + 0.22 * pulse;
+      ctx.lineWidth = Math.max(2, ringRadius * 0.55);
       ctx.beginPath();
       ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(segment.x2, segment.y2);
+      ctx.lineTo(endX, endY);
       ctx.stroke();
     } else {
-      const ringRadius = cfg.linkRadius ?? 3;
       const step = Math.max(13, ringRadius * 4);
-      const dist = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-      ctx.globalAlpha = 0.18;
+      const dist = Math.hypot(endX - segment.x1, endY - segment.y1);
+      const fade = 1 - activeProgress;
+      ctx.globalAlpha = 0.12 + fade * 0.12;
       ctx.strokeStyle = cfg.linkColor;
-      ctx.lineWidth = ringRadius * 4;
+      ctx.lineWidth = Math.max(ringRadius * 3.6, battleConfig.chainHitRadius * 0.22);
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(segment.x2, segment.y2);
+      ctx.lineTo(endX, endY);
       ctx.stroke();
 
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.42 + fade * 0.58;
       ctx.strokeStyle = cfg.linkColor;
       ctx.lineWidth = 1.5;
       ctx.lineCap = "butt";
@@ -383,6 +446,14 @@ export function startGameLoop(
       }
       ctx.stroke();
     }
+
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = effect.phase === "warning" ? cfg.warningColor : cfg.linkColor;
+    ctx.shadowColor = effect.phase === "warning" ? cfg.warningColor : cfg.linkColor;
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(effect.originX, effect.originY, ringRadius * 1.2, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
@@ -608,7 +679,7 @@ export function startGameLoop(
         if (authoritativeItem?.active && !requestedItemIds.has(authoritativeItem.itemId)) {
           const dx = localPlayer.x - authoritativeItem.x;
           const dy = localPlayer.y - authoritativeItem.y;
-          if (Math.sqrt(dx * dx + dy * dy) < localPlayer.radius + AUTHORITATIVE_ITEM_SIZE * 0.6) {
+          if (Math.hypot(dx, dy) <= battleConfig.itemPickupRadius) {
             requestedItemIds.add(authoritativeItem.itemId);
             online.emit("item:pickup", { itemId: authoritativeItem.itemId, t: Date.now() });
           }
@@ -658,8 +729,22 @@ export function startGameLoop(
             fireChain(online.localIdx, arenas, players[oppIdx].chainType, currentEncounter);
           }
         } else {
-          players[oppIdx].x = opponentX;
-          players[oppIdx].y = opponentY;
+          const dx = opponentX - players[oppIdx].x;
+          const dy = opponentY - players[oppIdx].y;
+          const distance = Math.hypot(dx, dy);
+          if (distance >= POSITION_SNAP_DISTANCE) {
+            players[oppIdx].x = opponentX;
+            players[oppIdx].y = opponentY;
+          } else {
+            players[oppIdx].x = lerp(players[oppIdx].x, opponentX, OPPONENT_POSITION_LERP);
+            players[oppIdx].y = lerp(players[oppIdx].y, opponentY, OPPONENT_POSITION_LERP);
+          }
+        }
+        if (useServerBattle) {
+          const mySnapshot = getPlayerStateSnapshot(online.myGuestId);
+          if (mySnapshot) {
+            applyAuthoritativeCorrection(players[online.localIdx], mySnapshot.x, mySnapshot.y);
+          }
         }
         // 내 위치 전송
         const lp = players[online.localIdx];
@@ -700,8 +785,7 @@ export function startGameLoop(
     } else {
       drawAuthoritativeItem(ctx, authoritativeItem);
       for (const effect of onlineChainEffects) {
-        const arena = effect.originX < canvas.width / 2 ? arenas[0] : arenas[1];
-        drawServerChainEffect(ctx, arena, effect);
+        drawServerChainEffect(ctx, effect);
       }
     }
 

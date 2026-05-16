@@ -2,7 +2,7 @@
 import { t } from "../i18n";
 import type { EncounterConfig } from "./encounter";
 import type { Player } from "./player";
-import { CHAIN_CONFIGS } from "./warning/index";
+import { getChainVisualConfig } from "./warning/index";
 
 export function drawFPS(ctx: CanvasRenderingContext2D, fps: number): void {
   ctx.save();
@@ -104,7 +104,7 @@ export function drawEncounterIntro(
 
 // 체인 보유 중 플레이어 주위 표시 링 — 보유 체인 타입 색상 반영
 export function drawChainRing(ctx: CanvasRenderingContext2D, player: Player): void {
-  const color = (CHAIN_CONFIGS[player.chainType] ?? CHAIN_CONFIGS["normal"]).linkColor;
+  const color = getChainVisualConfig(player.chainType).linkColor;
   const pulse = 0.65 + 0.35 * Math.sin(Date.now() / 1000 * 4);
   ctx.save();
   ctx.strokeStyle = color;
