@@ -181,6 +181,12 @@ body {
   text-transform: lowercase;
 }
 
+.menu-button--aux {
+  min-height: 86px;
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  opacity: 0.92;
+}
+
 .matchmaking-frame {
   padding: 0 0 36px;
 }
@@ -514,6 +520,17 @@ body {
 .settings-text-input:focus {
   border-color: rgba(255, 255, 255, 0.42);
   box-shadow: 0 0 calc(12px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.08);
+}
+
+.help-list {
+  display: grid;
+  gap: 14px;
+}
+
+.help-copy {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font: 500 1rem/1.6 "Avenir Next", "Helvetica Neue", Arial, sans-serif;
 }
 
 @keyframes menu-dust-rise {

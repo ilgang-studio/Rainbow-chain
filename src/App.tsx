@@ -27,7 +27,7 @@ const MENU_ITEMS = [
 
 type MenuMode = "casual" | "practice" | "double";
 type QueueMode = "casual";
-type ViewState = "menu" | "settings" | "matchmaking";
+type ViewState = "menu" | "settings" | "help" | "matchmaking";
 type ControlKey = keyof AppSettings["controls"];
 
 const SETTINGS_STORAGE_KEY = "rainbow-chain-settings";
@@ -233,12 +233,14 @@ function MainMenu({
   nickname,
   particleCount,
   onOpenSettings,
+  onOpenHelp,
   onQueueStart,
   onStartGame,
 }: {
   nickname: string;
   particleCount: number;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
   onQueueStart: (mode: QueueMode) => void;
   onStartGame: (mode: MenuMode) => void;
 }) {
@@ -274,7 +276,63 @@ function MainMenu({
                 <span className="menu-button-label">{t(item.id)}</span>
               </button>
             ))}
+            <button
+              type="button"
+              className="menu-button menu-button--aux"
+              onClick={onOpenHelp}
+            >
+              <span className="menu-button-label">{t("help")}</span>
+            </button>
           </div>
+        </section>
+      </section>
+    </main>
+  );
+}
+
+function HelpView({
+  particleCount,
+  onBack,
+}: {
+  particleCount: number;
+  onBack: () => void;
+}) {
+  return (
+    <main className="menu-shell">
+      <section className="menu-frame settings-frame" aria-label="Help">
+        <MenuBackground particleCount={particleCount} />
+
+        <header className="menu-header">
+          <h1 className="menu-title">{t("helpTitle")}</h1>
+          <button type="button" className="settings-back" onClick={onBack}>
+            {t("back")}
+          </button>
+        </header>
+
+        <section className="settings-grid">
+          <section className="settings-card">
+            <h2 className="settings-heading">{t("helpObjectiveTitle")}</h2>
+            <p className="help-copy">{t("helpObjectiveBody")}</p>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-heading">{t("helpControlsTitle")}</h2>
+            <p className="help-copy">{t("helpControlsBody")}</p>
+          </section>
+
+          <section className="settings-card settings-card--wide">
+            <h2 className="settings-heading">{t("helpHazardsTitle")}</h2>
+            <div className="help-list">
+              <p className="help-copy">{t("helpHazardsBody")}</p>
+              <p className="help-copy">{t("helpItemsBody")}</p>
+              <p className="help-copy">{t("helpPracticeBody")}</p>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-heading">{t("helpModesTitle")}</h2>
+            <p className="help-copy">{t("helpModesBody")}</p>
+          </section>
         </section>
       </section>
     </main>
@@ -943,6 +1001,11 @@ export default function App() {
         onChangeNickname={updateGuestNickname}
         onStartListening={setListeningKey}
       />
+    ) : view === "help" ? (
+      <HelpView
+        particleCount={particleCount}
+        onBack={() => runScreenTransition(t("loading"), () => setView("menu"))}
+      />
     ) : view === "matchmaking" ? (
       <MatchmakingView
         nickname={guestNickname || generateGuestNickname()}
@@ -959,6 +1022,7 @@ export default function App() {
         nickname={guestNickname || "Guest_00"}
         particleCount={particleCount}
         onOpenSettings={() => runScreenTransition(t("loading"), () => setView("settings"))}
+        onOpenHelp={() => runScreenTransition(t("loading"), () => setView("help"))}
         onQueueStart={beginMatchmaking}
         onStartGame={(mode) => runScreenTransition(t("loading"), () => {
           setActiveRoomStart(null);
