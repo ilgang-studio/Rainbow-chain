@@ -56,11 +56,6 @@ export function drawGameOver(
   ctx.font = "28px monospace";
   ctx.fillText(deadIdx === 0 ? "PLAYER 1  DEFEATED" : "PLAYER 2  DEFEATED", cx, cy + 14);
 
-  ctx.shadowBlur = 0;
-  ctx.fillStyle  = "#666666";
-  ctx.font = "18px monospace";
-  ctx.fillText("Press  R  to restart", cx, cy + 66);
-
   ctx.restore();
 }
 

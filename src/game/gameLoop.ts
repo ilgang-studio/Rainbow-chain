@@ -63,8 +63,9 @@ export function startGameLoop(
     onRestartRequest?: () => void;
     online?: OnlineGameOptions;
     battleConfig?: BattleConfig;
+    encounterTheme?: EncounterConfig | null;
   },
-  onGameOverChange?: (isGameOver: boolean) => void,
+  onGameOverChange?: (next: { isGameOver: boolean; deadIdx?: 0 | 1 }) => void,
 ): () => void {
   const ctx   = canvas.getContext("2d")!;
   resetWarnings();
@@ -80,7 +81,8 @@ export function startGameLoop(
   const battleConfig = options?.battleConfig ?? DEFAULT_BATTLE_CONFIG;
   const arenaCount = practiceMode ? 1 : 2;
   const playerCount = practiceMode ? 1 : 2;
-  const currentEncounter: EncounterConfig | null = useServerBattle ? null : getRandomEncounter();
+  const currentEncounter: EncounterConfig | null = options?.encounterTheme
+    ?? (useServerBattle ? null : getRandomEncounter());
   let encounterIntroTimer = 3;
   let latestBattleState: BattleStatePayload | null = null;
   let authoritativeItem: BattleItemSnapshot | null = null;
@@ -109,7 +111,7 @@ export function startGameLoop(
         ? (1 - online.localIdx) as 0 | 1
         : online.localIdx;
     }
-    onGameOverChange?.(true);
+    onGameOverChange?.({ isGameOver: true, deadIdx });
   };
 
   const handleBattleState = (data: unknown) => {
@@ -465,7 +467,7 @@ export function startGameLoop(
     if (isGameOver) return;
     isGameOver = true;
     deadIdx = nextDeadIdx;
-    onGameOverChange?.(true);
+    onGameOverChange?.({ isGameOver: true, deadIdx: nextDeadIdx });
     if (online) {
       const winnerGuestId = nextDeadIdx === online.localIdx
         ? online.opponentGuestId
@@ -659,7 +661,7 @@ export function startGameLoop(
 
     if (!isGameOver) {
       gameTime += dt;
-      if (!useServerBattle) {
+      if (currentEncounter) {
         encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
       }
 
@@ -797,9 +799,7 @@ export function startGameLoop(
     // ── 타이머 + FPS ────────────────────────
     drawTimer(ctx, canvas.width, gameTime);
     drawFPS(ctx, fpsDisplay);
-    if (!useServerBattle) {
-      drawEncounterIntro(ctx, canvas.width, canvas.height, currentEncounter, encounterIntroTimer);
-    }
+    drawEncounterIntro(ctx, canvas.width, canvas.height, currentEncounter, encounterIntroTimer);
 
     // ── 게임 오버 오버레이 ───────────────────
     if (isGameOver) drawGameOver(ctx, canvas.width, canvas.height, deadIdx!);

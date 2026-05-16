@@ -496,6 +496,7 @@ export default function App() {
   const [hasEnteredNickname, setHasEnteredNickname] = useState(storedGuestNickname.length > 0);
   const [transitionActive, setTransitionActive] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState("LOADING");
+  const [battleTrackIndex, setBattleTrackIndex] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioKindRef = useRef<"menu" | "battle" | null>(null);
   const audioTrackRef = useRef<string | null>(null);
@@ -644,8 +645,8 @@ export default function App() {
           audio.src = mainThemeTrack;
         }
       } else {
-        if (!audioTrackRef.current || !BATTLE_TRACKS.includes(audioTrackRef.current)) {
-          const battleTrack = BATTLE_TRACKS[Math.floor(Math.random() * BATTLE_TRACKS.length)];
+        const battleTrack = BATTLE_TRACKS[((battleTrackIndex % BATTLE_TRACKS.length) + BATTLE_TRACKS.length) % BATTLE_TRACKS.length];
+        if (audioTrackRef.current !== battleTrack) {
           audioTrackRef.current = battleTrack;
           audio.src = battleTrack;
         }
@@ -675,7 +676,7 @@ export default function App() {
         audioResumeRef.current = null;
       }
     };
-  }, [selectedMode, settings.bgmVolume]);
+  }, [selectedMode, settings.bgmVolume, battleTrackIndex]);
 
   const particleCount = settings.particleIntensity === "low"
     ? 40
@@ -918,6 +919,7 @@ export default function App() {
         roomStart={activeRoomStart}
         guestId={guestId}
         settings={settings}
+        onBattleTrackChange={setBattleTrackIndex}
         onExit={() => {
           runScreenTransition(t("loading"), () => {
             setActiveRoomStart(null);

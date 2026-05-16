@@ -33,6 +33,14 @@ const translations = {
     restart: "Restart",
     main: "Main",
     mainMenu: "Main Menu",
+    round: "ROUND",
+    roundResult: "ROUND RESULT",
+    finalScore: "FINAL SCORE",
+    victory: "VICTORY",
+    defeat: "DEFEAT",
+    preparingNextRound: "Preparing next round...",
+    nextRoundIn: "Next round in %{count}",
+    rematch: "REMATCH",
     waitingForOpponent: "Waiting for opponent...",
     opponentLeft: "Opponent left. Searching new match...",
     searchingNewMatch: "Searching new match...",
@@ -83,6 +91,14 @@ const translations = {
     restart: "재시작",
     main: "메인",
     mainMenu: "메인 메뉴",
+    round: "라운드",
+    roundResult: "라운드 결과",
+    finalScore: "최종 점수",
+    victory: "승리",
+    defeat: "패배",
+    preparingNextRound: "다음 라운드를 준비 중...",
+    nextRoundIn: "%{count}초 후 다음 라운드",
+    rematch: "리매치",
     waitingForOpponent: "상대방을 기다리는 중...",
     opponentLeft: "상대방이 나갔습니다. 새 매칭 탐색 중...",
     searchingNewMatch: "새 매칭 탐색 중...",
@@ -133,6 +149,14 @@ const translations = {
     restart: "リスタート",
     main: "メイン",
     mainMenu: "メインメニュー",
+    round: "ラウンド",
+    roundResult: "ラウンド結果",
+    finalScore: "最終スコア",
+    victory: "勝利",
+    defeat: "敗北",
+    preparingNextRound: "次のラウンドを準備中...",
+    nextRoundIn: "%{count}秒後に次のラウンド",
+    rematch: "リマッチ",
     waitingForOpponent: "対戦相手を待っています...",
     opponentLeft: "相手が退出しました。新しいマッチを探しています...",
     searchingNewMatch: "新しいマッチを探しています...",
@@ -183,6 +207,14 @@ const translations = {
     restart: "重新开始",
     main: "主界面",
     mainMenu: "主菜单",
+    round: "回合",
+    roundResult: "回合结果",
+    finalScore: "最终比分",
+    victory: "胜利",
+    defeat: "失败",
+    preparingNextRound: "正在准备下一回合...",
+    nextRoundIn: "%{count}秒后进入下一回合",
+    rematch: "再来一局",
     waitingForOpponent: "等待对手中...",
     opponentLeft: "对手已离开。正在搜索新对手...",
     searchingNewMatch: "正在搜索新对手...",
@@ -226,6 +258,6 @@ export function setLocale(lang: Language): void {
   i18n.locale = lang;
 }
 
-export function t(key: string): string {
-  return String(i18n.t(key));
+export function t(key: string, options?: Record<string, unknown>): string {
+  return String(i18n.t(key, options));
 }
