@@ -32,6 +32,7 @@ interface OnlineChainEffect {
   chainId: string;
   ownerGuestId: string;
   chainType: string;
+  arenaIdx: 0 | 1;
   originX: number;
   originY: number;
   dx: number;
@@ -90,15 +91,77 @@ export function startGameLoop(
   const requestedItemIds = new Set<string>();
   let awaitingChainResolution = false;
   let serverClockOffsetMs = 0;
+  const serverLaneWidth = battleConfig.worldWidth / 2;
+  const serverLaneHeight = battleConfig.worldHeight;
 
   // 온라인 모드: 상대 최신 위치를 매 tick 반영
   let opponentX = players[online ? (1 - online.localIdx) as 0|1 : 1].x;
   let opponentY = players[online ? (1 - online.localIdx) as 0|1 : 1].y;
 
+  function getServerLaneRect(arenaIdx: 0 | 1): { x: number; y: number; w: number; h: number } {
+    return {
+      x: arenaIdx === 0 ? 0 : serverLaneWidth,
+      y: 0,
+      w: serverLaneWidth,
+      h: serverLaneHeight,
+    };
+  }
+
+  function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function mapClientPointToServer(arenaIdx: 0 | 1, x: number, y: number): { x: number; y: number } {
+    const arena = arenas[arenaIdx];
+    const lane = getServerLaneRect(arenaIdx);
+    const tx = clamp01((x - arena.x) / arena.w);
+    const ty = clamp01((y - arena.y) / arena.h);
+    return {
+      x: lane.x + tx * lane.w,
+      y: lane.y + ty * lane.h,
+    };
+  }
+
+  function mapServerPointToClient(arenaIdx: 0 | 1, x: number, y: number): { x: number; y: number } {
+    const arena = arenas[arenaIdx];
+    const lane = getServerLaneRect(arenaIdx);
+    const tx = clamp01((x - lane.x) / lane.w);
+    const ty = clamp01((y - lane.y) / lane.h);
+    return {
+      x: arena.x + tx * arena.w,
+      y: arena.y + ty * arena.h,
+    };
+  }
+
+  function mapClientDirectionToServer(arenaIdx: 0 | 1, dx: number, dy: number): { dx: number; dy: number } {
+    const arena = arenas[arenaIdx];
+    const lane = getServerLaneRect(arenaIdx);
+    const scaledDx = dx * (lane.w / arena.w);
+    const scaledDy = dy * (lane.h / arena.h);
+    const len = Math.hypot(scaledDx, scaledDy);
+    if (len <= 0.0001) return { dx: 1, dy: 0 };
+    return { dx: scaledDx / len, dy: scaledDy / len };
+  }
+
+  function mapServerDirectionToClient(arenaIdx: 0 | 1, dx: number, dy: number): { dx: number; dy: number } {
+    const arena = arenas[arenaIdx];
+    const lane = getServerLaneRect(arenaIdx);
+    const scaledDx = dx * (arena.w / lane.w);
+    const scaledDy = dy * (arena.h / lane.h);
+    const len = Math.hypot(scaledDx, scaledDy);
+    if (len <= 0.0001) return { dx: 1, dy: 0 };
+    return { dx: scaledDx / len, dy: scaledDy / len };
+  }
+
+  function getArenaIdxForServerX(x: number): 0 | 1 {
+    return x < serverLaneWidth ? 0 : 1;
+  }
+
   const handlePlayerMoved = (data: unknown) => {
     const { x, y } = data as { x: number; y: number };
-    opponentX = x;
-    opponentY = y;
+    const mapped = mapServerPointToClient((online ? (1 - online.localIdx) : 1) as 0 | 1, x, y);
+    opponentX = mapped.x;
+    opponentY = mapped.y;
   };
   const handleRoomEnd = (data: unknown) => {
     const { winnerGuestId } = data as { winnerGuestId: string | null };
@@ -117,7 +180,17 @@ export function startGameLoop(
   const handleBattleState = (data: unknown) => {
     latestBattleState = data as BattleStatePayload;
     serverClockOffsetMs = Date.now() - latestBattleState.serverTime;
-    authoritativeItem = latestBattleState.item;
+    if (latestBattleState.item) {
+      const arenaIdx = getArenaIdxForServerX(latestBattleState.item.x);
+      const mapped = mapServerPointToClient(arenaIdx, latestBattleState.item.x, latestBattleState.item.y);
+      authoritativeItem = {
+        ...latestBattleState.item,
+        x: mapped.x,
+        y: mapped.y,
+      };
+    } else {
+      authoritativeItem = null;
+    }
     if (online) {
       const mySnapshot = latestBattleState.players.find((player) => player.guestId === online.myGuestId);
       const opponentSnapshot = latestBattleState.players.find((player) => player.guestId === online.opponentGuestId);
@@ -130,8 +203,9 @@ export function startGameLoop(
         const oppIdx = (1 - online.localIdx) as 0 | 1;
         players[oppIdx].hasChain = opponentSnapshot.heldChainType != null;
         players[oppIdx].chainType = opponentSnapshot.heldChainType ?? "normal";
-        opponentX = opponentSnapshot.x;
-        opponentY = opponentSnapshot.y;
+        const mappedOpponent = mapServerPointToClient(oppIdx, opponentSnapshot.x, opponentSnapshot.y);
+        opponentX = mappedOpponent.x;
+        opponentY = mappedOpponent.y;
       }
     }
     if (!latestBattleState.item?.active) {
@@ -142,8 +216,10 @@ export function startGameLoop(
   const handlePlayerState = (data: unknown) => {
     if (!online) return;
     const payload = data as PlayerStatePayload;
-    opponentX = payload.x;
-    opponentY = payload.y;
+    const oppIdx = (1 - online.localIdx) as 0 | 1;
+    const mapped = mapServerPointToClient(oppIdx, payload.x, payload.y);
+    opponentX = mapped.x;
+    opponentY = mapped.y;
     const snapshot = latestBattleState?.players.find((player) => player.guestId === online.opponentGuestId);
     if (!snapshot) return;
     snapshot.x = payload.x;
@@ -154,11 +230,13 @@ export function startGameLoop(
 
   const handleItemSpawned = (data: unknown) => {
     const payload = data as ItemSpawnedPayload;
+    const arenaIdx = getArenaIdxForServerX(payload.x);
+    const mapped = mapServerPointToClient(arenaIdx, payload.x, payload.y);
     authoritativeItem = {
       itemId: payload.itemId,
       chainType: payload.chainType,
-      x: payload.x,
-      y: payload.y,
+      x: mapped.x,
+      y: mapped.y,
       active: true,
       respawnAt: null,
       pickedByGuestId: null,
@@ -196,6 +274,9 @@ export function startGameLoop(
     payload: ChainWarningPayload | ChainSpawnPayload,
     phase: "warning" | "active",
   ) => {
+    const arenaIdx = getArenaIdxForServerX(payload.originX);
+    const mappedOrigin = mapServerPointToClient(arenaIdx, payload.originX, payload.originY);
+    const mappedDirection = mapServerDirectionToClient(arenaIdx, payload.dx, payload.dy);
     const fireAtLocal = toLocalTimeFromServer(payload.fireAt);
     const firedAtLocal = "firedAt" in payload ? toLocalTimeFromServer(payload.firedAt) : undefined;
     const activeVisualMs = Math.max(420, Math.round(battleConfig.chainWarningMs * 0.9));
@@ -206,10 +287,11 @@ export function startGameLoop(
     if (existing) {
       existing.ownerGuestId = payload.ownerGuestId;
       existing.chainType = payload.chainType;
-      existing.originX = payload.originX;
-      existing.originY = payload.originY;
-      existing.dx = payload.dx;
-      existing.dy = payload.dy;
+      existing.arenaIdx = arenaIdx;
+      existing.originX = mappedOrigin.x;
+      existing.originY = mappedOrigin.y;
+      existing.dx = mappedDirection.dx;
+      existing.dy = mappedDirection.dy;
       existing.phase = phase;
       existing.removeAt = removeAt;
       existing.warningAt = payload.warningAt;
@@ -221,10 +303,11 @@ export function startGameLoop(
       chainId: payload.chainId,
       ownerGuestId: payload.ownerGuestId,
       chainType: payload.chainType,
-      originX: payload.originX,
-      originY: payload.originY,
-      dx: payload.dx,
-      dy: payload.dy,
+      arenaIdx,
+      originX: mappedOrigin.x,
+      originY: mappedOrigin.y,
+      dx: mappedDirection.dx,
+      dy: mappedDirection.dy,
       phase,
       removeAt,
       warningAt: payload.warningAt,
@@ -340,21 +423,20 @@ export function startGameLoop(
     }]);
   }
 
-  function getRayCanvasSegment(
+  function getRayRectSegment(
     originX: number,
     originY: number,
     dx: number,
     dy: number,
     range: number,
-    canvasWidth: number,
-    canvasHeight: number,
+    rect: Arena,
   ): { x1: number; y1: number; x2: number; y2: number } | null {
     let maxT = Math.max(0, range);
     if (Math.abs(dx) > 0.0001) {
-      maxT = Math.min(maxT, dx > 0 ? (canvasWidth - originX) / dx : (0 - originX) / dx);
+      maxT = Math.min(maxT, dx > 0 ? (rect.x + rect.w - originX) / dx : (rect.x - originX) / dx);
     }
     if (Math.abs(dy) > 0.0001) {
-      maxT = Math.min(maxT, dy > 0 ? (canvasHeight - originY) / dy : (0 - originY) / dy);
+      maxT = Math.min(maxT, dy > 0 ? (rect.y + rect.h - originY) / dy : (rect.y - originY) / dy);
     }
     if (!Number.isFinite(maxT) || maxT <= 0) return null;
     return {
@@ -369,19 +451,19 @@ export function startGameLoop(
     ctx: CanvasRenderingContext2D,
     effect: OnlineChainEffect,
   ): void {
+    const arena = arenas[effect.arenaIdx];
     const cfg = getChainVisualConfig(effect.chainType);
     const len = Math.hypot(effect.dx, effect.dy);
     if (len <= 0.0001) return;
     const dx = effect.dx / len;
     const dy = effect.dy / len;
-    const segment = getRayCanvasSegment(
+    const segment = getRayRectSegment(
       effect.originX,
       effect.originY,
       dx,
       dy,
-      battleConfig.chainRange,
-      canvas.width,
-      canvas.height,
+      Math.max(arena.w, arena.h) * 1.35,
+      arena,
     );
     if (!segment) return;
     const approxServerNow = getApproxServerNow();
@@ -403,7 +485,7 @@ export function startGameLoop(
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.rect(arena.x, arena.y, arena.w, arena.h);
     ctx.clip();
 
     if (effect.phase === "warning") {
@@ -622,8 +704,9 @@ export function startGameLoop(
         && !awaitingChainResolution
       ) {
         const aim = getAimVector(localPlayer, opponentX, opponentY);
+        const serverAim = mapClientDirectionToServer(online.localIdx, aim.dx, aim.dy);
         awaitingChainResolution = true;
-        online.emit("chain:cast", { dx: aim.dx, dy: aim.dy, t: Date.now() });
+        online.emit("chain:cast", { dx: serverAim.dx, dy: serverAim.dy, t: Date.now() });
       }
       return;
     }
@@ -745,17 +828,19 @@ export function startGameLoop(
         if (useServerBattle) {
           const mySnapshot = getPlayerStateSnapshot(online.myGuestId);
           if (mySnapshot) {
-            applyAuthoritativeCorrection(players[online.localIdx], mySnapshot.x, mySnapshot.y);
+            const mappedSelf = mapServerPointToClient(online.localIdx, mySnapshot.x, mySnapshot.y);
+            applyAuthoritativeCorrection(players[online.localIdx], mappedSelf.x, mappedSelf.y);
           }
         }
         // 내 위치 전송
         const lp = players[online.localIdx];
-        online.emit("player:move", { x: lp.x, y: lp.y, vx: 0, vy: 0, t: Date.now() });
+        const serverPoint = mapClientPointToServer(online.localIdx, lp.x, lp.y);
+        online.emit("player:move", { x: serverPoint.x, y: serverPoint.y, vx: 0, vy: 0, t: Date.now() });
         if (useServerBattle) {
           const mySnapshot = getPlayerStateSnapshot(online.myGuestId);
           online.emit("player:state", {
-            x: lp.x,
-            y: lp.y,
+            x: serverPoint.x,
+            y: serverPoint.y,
             hp: mySnapshot?.hp ?? 0,
             score: mySnapshot?.score ?? 0,
             t: Date.now(),

@@ -490,7 +490,7 @@ export default function GameCanvas({
       <div
         style={{
           position: "fixed",
-          top: "4.8vh",
+          top: "92px",
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 18,
