@@ -62,6 +62,10 @@ function getRoundTheme(seed: number, roundNumber: number): RoundTheme {
   };
 }
 
+function getRoundSeed(seed: number, roundNumber: number): number {
+  return hashRoundSeed(seed, 0x632be5ab ^ Math.imul(roundNumber, 0x9e3779b9));
+}
+
 export default function GameCanvas({
   mode = "casual",
   roomStart,
@@ -319,7 +323,11 @@ export default function GameCanvas({
     const cleanupInput = initInput();
     const arenas = createArenas(logicalW, logicalH, mode);
 
-    if (isOnline) seedRng(roomStart!.seed);
+    if (isOnline) {
+      seedRng(getRoundSeed(roomStart!.seed, roundNumber));
+    } else {
+      seedRng(getRoundSeed(localMatchSeedRef.current, roundNumber));
+    }
 
     const players = createPlayers(
       arenas,
@@ -376,7 +384,7 @@ export default function GameCanvas({
       cleanupLoop();
       if (isOnline) resetRng();
     };
-  }, [mode, settings, runId, guestId, roomStart, isOnline, opponentIsBot, localPlayerIdx, opponentPlayer, roundTheme.encounter]);
+  }, [mode, settings, runId, guestId, roomStart, isOnline, opponentIsBot, localPlayerIdx, opponentPlayer, roundTheme.encounter, roundNumber]);
 
   const myScore = roundWins[localPlayerIdx] ?? roundWins[0];
   const opponentScore = roundWins[(1 - localPlayerIdx) as 0 | 1] ?? roundWins[1];
@@ -490,23 +498,29 @@ export default function GameCanvas({
       <div
         style={{
           position: "fixed",
-          top: "92px",
+          top: "72px",
           left: "50%",
           transform: "translateX(-50%)",
           zIndex: 18,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "6px",
+          gap: "4px",
           pointerEvents: "none",
+          minWidth: "148px",
+          padding: "10px 18px 12px",
+          background: "rgba(0,0,0,0.42)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 0 18px rgba(255,255,255,0.08)",
+          backdropFilter: "blur(6px)",
         }}
       >
         <div
           style={{
             color: "rgba(255,255,255,0.92)",
-            font: '700 17px/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif',
+            font: "bold 14px/1 monospace",
             letterSpacing: "0.24em",
-            textShadow: "0 0 12px rgba(255,255,255,0.35)",
+            textShadow: "0 0 10px rgba(255,255,255,0.28)",
           }}
         >
           {t("round")} {roundNumber}
@@ -514,9 +528,9 @@ export default function GameCanvas({
         <div
           style={{
             color: "#fff",
-            font: '800 30px/1 "Avenir Next Condensed", "Helvetica Neue", Arial, sans-serif',
-            letterSpacing: "0.2em",
-            textShadow: "0 0 18px rgba(255,255,255,0.5)",
+            font: "bold 28px/1 monospace",
+            letterSpacing: "0.16em",
+            textShadow: "0 0 14px rgba(255,255,255,0.42)",
           }}
         >
           {myScore} - {opponentScore}

@@ -84,6 +84,7 @@ export function startGameLoop(
   const playerCount = practiceMode ? 1 : 2;
   const currentEncounter: EncounterConfig | null = options?.encounterTheme
     ?? (useServerBattle ? null : getRandomEncounter());
+  const useDeterministicEncounterChains = Boolean(currentEncounter && online && !enableAi);
   let encounterIntroTimer = 3;
   let latestBattleState: BattleStatePayload | null = null;
   let authoritativeItem: BattleItemSnapshot | null = null;
@@ -781,7 +782,7 @@ export function startGameLoop(
       }
 
       // ── 경고 / 사슬 업데이트 ───────────────
-      if (!useServerBattle) {
+      if (!useServerBattle || useDeterministicEncounterChains) {
         updateWarnings(dt, arenas, players, gameTime, {
           practiceMode,
           onChainLaunch: options?.onChainLaunch,
@@ -860,14 +861,16 @@ export function startGameLoop(
       }
 
       // ── 충돌 판정 ──────────────────────────
-      if (!useServerBattle) {
+      if (!useServerBattle || useDeterministicEncounterChains) {
         checkCollisions();
       }
     }
 
     // ── 렌더링 ──────────────────────────────
-    if (!useServerBattle) {
+    if (!useServerBattle || useDeterministicEncounterChains) {
       drawWarnings(ctx, arenas);
+    }
+    if (!useServerBattle) {
       drawItems(ctx, practiceMode ? [items[0]] : items);
     } else {
       drawAuthoritativeItem(ctx, authoritativeItem);
