@@ -278,7 +278,7 @@ function MainMenu({
             ))}
             <button
               type="button"
-              className="menu-button menu-button--aux"
+              className="menu-button"
               onClick={onOpenHelp}
             >
               <span className="menu-button-label">{t("help")}</span>

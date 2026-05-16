@@ -187,12 +187,6 @@ body {
   text-transform: lowercase;
 }
 
-.menu-button--aux {
-  min-height: 86px;
-  font-size: clamp(1.35rem, 2.2vw, 2rem);
-  opacity: 0.92;
-}
-
 .matchmaking-frame {
   padding: 0 0 36px;
 }
