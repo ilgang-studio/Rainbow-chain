@@ -19,7 +19,7 @@ import type {
   ItemSpawnedPayload,
   PlayerStatePayload,
 } from "../network/events";
-import { CHAIN_TYPES, DEFAULT_BATTLE_CONFIG, type BattleConfig, type ChainType } from "../shared/battle";
+import { DEFAULT_BATTLE_CONFIG, type BattleConfig } from "../shared/battle";
 
 const MAX_DT = 1 / 30;
 const AUTHORITATIVE_ITEM_SIZE = 13;
@@ -65,7 +65,8 @@ export function startGameLoop(
     online?: OnlineGameOptions;
     battleConfig?: BattleConfig;
     encounterTheme?: EncounterConfig | null;
-    authoritativeSeed?: number;
+    initialBattleState?: BattleStatePayload | null;
+    initialItem?: ItemSpawnedPayload | null;
   },
   onGameOverChange?: (next: { isGameOver: boolean; deadIdx?: 0 | 1 }) => void,
 ): () => void {
@@ -159,37 +160,6 @@ export function startGameLoop(
     return x < serverLaneWidth ? 0 : 1;
   }
 
-  function nextSeededRandom(state: { value: number }): number {
-    let t = state.value += 0x6d2b79f5;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-  }
-
-  function createInitialAuthoritativeItem(seed: number): BattleItemSnapshot {
-    const rngState = { value: seed >>> 0 };
-    const typeIndex = Math.floor(nextSeededRandom(rngState) * CHAIN_TYPES.length);
-    const chainType = (CHAIN_TYPES[typeIndex] ?? CHAIN_TYPES[0]) as ChainType;
-    const spawnMargin = 96;
-    const serverX = spawnMargin + nextSeededRandom(rngState) * (battleConfig.worldWidth - spawnMargin * 2);
-    const serverY = spawnMargin + nextSeededRandom(rngState) * (battleConfig.worldHeight - spawnMargin * 2);
-    const arenaIdx = getArenaIdxForServerX(serverX);
-    const mapped = mapServerPointToClient(arenaIdx, serverX, serverY);
-    return {
-      itemId: `seeded-${seed}`,
-      chainType,
-      x: mapped.x,
-      y: mapped.y,
-      active: true,
-      respawnAt: null,
-      pickedByGuestId: null,
-    };
-  }
-
-  if (useServerBattle && options?.authoritativeSeed != null) {
-    authoritativeItem = createInitialAuthoritativeItem(options.authoritativeSeed);
-  }
-
   const handlePlayerMoved = (data: unknown) => {
     const { x, y } = data as { x: number; y: number };
     const mapped = mapServerPointToClient((online ? (1 - online.localIdx) : 1) as 0 | 1, x, y);
@@ -210,20 +180,39 @@ export function startGameLoop(
     onGameOverChange?.({ isGameOver: true, deadIdx });
   };
 
-  const handleBattleState = (data: unknown) => {
-    latestBattleState = data as BattleStatePayload;
-    serverClockOffsetMs = Date.now() - latestBattleState.serverTime;
-    if (latestBattleState.item) {
-      const arenaIdx = getArenaIdxForServerX(latestBattleState.item.x);
-      const mapped = mapServerPointToClient(arenaIdx, latestBattleState.item.x, latestBattleState.item.y);
-      authoritativeItem = {
-        ...latestBattleState.item,
-        x: mapped.x,
-        y: mapped.y,
-      };
-    } else {
+  function applyItemSnapshot(item: BattleItemSnapshot | null): void {
+    if (!item) {
       authoritativeItem = null;
+      return;
     }
+    const arenaIdx = getArenaIdxForServerX(item.x);
+    const mapped = mapServerPointToClient(arenaIdx, item.x, item.y);
+    authoritativeItem = {
+      ...item,
+      x: mapped.x,
+      y: mapped.y,
+    };
+  }
+
+  function applyItemSpawned(payload: ItemSpawnedPayload): void {
+    const arenaIdx = getArenaIdxForServerX(payload.x);
+    const mapped = mapServerPointToClient(arenaIdx, payload.x, payload.y);
+    authoritativeItem = {
+      itemId: payload.itemId,
+      chainType: payload.chainType,
+      x: mapped.x,
+      y: mapped.y,
+      active: true,
+      respawnAt: null,
+      pickedByGuestId: null,
+    };
+    requestedItemIds.delete(payload.itemId);
+  }
+
+  function applyBattleState(payload: BattleStatePayload): void {
+    latestBattleState = payload;
+    serverClockOffsetMs = Date.now() - latestBattleState.serverTime;
+    applyItemSnapshot(latestBattleState.item);
     if (online) {
       const mySnapshot = latestBattleState.players.find((player) => player.guestId === online.myGuestId);
       const opponentSnapshot = latestBattleState.players.find((player) => player.guestId === online.opponentGuestId);
@@ -244,6 +233,18 @@ export function startGameLoop(
     if (!latestBattleState.item?.active) {
       requestedItemIds.clear();
     }
+  }
+
+  if (useServerBattle) {
+    if (options?.initialBattleState) {
+      applyBattleState(options.initialBattleState);
+    } else if (options?.initialItem) {
+      applyItemSpawned(options.initialItem);
+    }
+  }
+
+  const handleBattleState = (data: unknown) => {
+    applyBattleState(data as BattleStatePayload);
   };
 
   const handlePlayerState = (data: unknown) => {
@@ -262,19 +263,7 @@ export function startGameLoop(
   };
 
   const handleItemSpawned = (data: unknown) => {
-    const payload = data as ItemSpawnedPayload;
-    const arenaIdx = getArenaIdxForServerX(payload.x);
-    const mapped = mapServerPointToClient(arenaIdx, payload.x, payload.y);
-    authoritativeItem = {
-      itemId: payload.itemId,
-      chainType: payload.chainType,
-      x: mapped.x,
-      y: mapped.y,
-      active: true,
-      respawnAt: null,
-      pickedByGuestId: null,
-    };
-    requestedItemIds.delete(payload.itemId);
+    applyItemSpawned(data as ItemSpawnedPayload);
   };
 
   const handleItemPicked = (data: unknown) => {

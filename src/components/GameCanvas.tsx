@@ -370,7 +370,8 @@ export default function GameCanvas({
       online: onlineOptions,
       battleConfig,
       encounterTheme: roundTheme.encounter,
-      authoritativeSeed: roomStart?.seed,
+      initialBattleState: roomStart?.initialBattleState,
+      initialItem: roomStart?.initialItem,
     }, ({ isGameOver, deadIdx }) => {
       setGameOver(isGameOver);
       if (!isGameOver || deadIdx == null) return;

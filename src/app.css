@@ -11,6 +11,7 @@ body {
 
 .menu-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 0;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 32%),
@@ -21,6 +22,7 @@ body {
 .menu-frame {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 28px 28px 36px;
   background:
     linear-gradient(
@@ -34,7 +36,10 @@ body {
   box-shadow:
     0 0 calc(22px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.08),
     inset 0 0 calc(28px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.08);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .menu-background-fx {
@@ -140,6 +145,7 @@ body {
 .menu-buttons {
   position: relative;
   z-index: 1;
+  padding-bottom: 24px;
 }
 
 .menu-button {
@@ -669,6 +675,7 @@ body {
 @media (max-width: 960px) {
   .menu-frame {
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 22px 18px 28px;
   }
 
