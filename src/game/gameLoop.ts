@@ -98,6 +98,19 @@ export function startGameLoop(
   const items = createItems(arenas);
   const arenaAi = createArenaAi();
 
+  function triggerGameOver(nextDeadIdx: 0 | 1): void {
+    if (isGameOver) return;
+    isGameOver = true;
+    deadIdx = nextDeadIdx;
+    onGameOverChange?.(true);
+    if (online) {
+      const winnerGuestId = nextDeadIdx === online.localIdx
+        ? online.opponentGuestId
+        : online.myGuestId;
+      online.emit("game:over", { winnerGuestId });
+    }
+  }
+
   function checkCollisions(): void {
     const CHAIN_LINK_R = 3; // warning.ts LINK_R와 동일
     for (const chain of getActiveChains()) {
@@ -129,7 +142,8 @@ export function startGameLoop(
           && p.x + p.radius >= left
           && p.x - p.radius <= right
         ) {
-          isGameOver = true; deadIdx = chain.arenaIdx; return;
+          triggerGameOver(chain.arenaIdx);
+          return;
         }
 
         if (
@@ -138,7 +152,8 @@ export function startGameLoop(
           && p.y + p.radius >= chain.centerPos - drawn2
           && p.y - p.radius <= chain.centerPos
         ) {
-          isGameOver = true; deadIdx = chain.arenaIdx; return;
+          triggerGameOver(chain.arenaIdx);
+          return;
         }
         continue;
       }
@@ -149,14 +164,16 @@ export function startGameLoop(
         const points = chain.trackPoints;
         if (points.length === 1) {
           if (Math.hypot(p.x - points[0].x, p.y - points[0].y) <= hitRadius) {
-            isGameOver = true; deadIdx = chain.arenaIdx; return;
+            triggerGameOver(chain.arenaIdx);
+            return;
           }
         } else {
           for (let i = 1; i < points.length; i++) {
             const a = points[i - 1];
             const b = points[i];
             if (pointToSegmentDistance(p.x, p.y, a.x, a.y, b.x, b.y) <= hitRadius) {
-              isGameOver = true; deadIdx = chain.arenaIdx; return;
+              triggerGameOver(chain.arenaIdx);
+              return;
             }
           }
         }
@@ -175,7 +192,8 @@ export function startGameLoop(
           const s1End   = chain.direction === 1 ? adjBase + drawn1 : adjMax;
           const along1  = isVert ? p.y : p.x;
           if (along1 + p.radius >= s1Start && along1 - p.radius <= s1End) {
-            isGameOver = true; deadIdx = chain.arenaIdx; return;
+            triggerGameOver(chain.arenaIdx);
+            return;
           }
         }
 
@@ -187,7 +205,8 @@ export function startGameLoop(
             const s2End   = chain.turnDir === 1 ? chain.centerPos + drawn2 : chain.centerPos;
             const along2  = isVert ? p.x : p.y;
             if (along2 + p.radius >= s2Start && along2 - p.radius <= s2End) {
-              isGameOver = true; deadIdx = chain.arenaIdx; return;
+              triggerGameOver(chain.arenaIdx);
+              return;
             }
           }
         }
@@ -222,15 +241,7 @@ export function startGameLoop(
       const along = isVert ? p.y : p.x;
       if (along + p.radius < segStart || along - p.radius > segEnd) continue;
 
-      isGameOver = true;
-      deadIdx    = chain.arenaIdx;
-      onGameOverChange?.(true);
-      if (online) {
-        const winnerGuestId = deadIdx === online.localIdx
-          ? online.opponentGuestId  // 내가 죽음 → 상대 승
-          : online.myGuestId;       // 상대가 죽음 → 내가 승
-        online.emit("game:over", { winnerGuestId });
-      }
+      triggerGameOver(chain.arenaIdx);
       return;
     }
   }
