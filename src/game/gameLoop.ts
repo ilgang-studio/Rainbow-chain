@@ -480,14 +480,10 @@ export function startGameLoop(
       ? 0
       : Math.max(0, Math.min(1, (approxServerNow - effect.firedAt) / activeVisualMs));
     const beamLength = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-    const drawLength = effect.phase === "warning"
-      ? beamLength * (0.24 + warningProgress * 0.76)
-      : beamLength;
-    const endX = segment.x1 + dx * drawLength;
-    const endY = segment.y1 + dy * drawLength;
     const bandHalf = Math.max(18, battleConfig.chainHitRadius * 0.5, cfg.bandHalfWidth ?? 0);
     const ringRadius = Math.max(4, Math.min(10, battleConfig.chainHitRadius * 0.08, cfg.linkRadius ?? 5));
     const pulse = 0.72 + 0.28 * Math.sin(approxServerNow / 90);
+    const isVertical = Math.abs(dy) > Math.abs(dx);
 
     ctx.save();
     ctx.beginPath();
@@ -495,24 +491,29 @@ export function startGameLoop(
     ctx.clip();
 
     if (effect.phase === "warning") {
-      ctx.globalAlpha = 0.14 + warningProgress * 0.14;
-      ctx.strokeStyle = cfg.warningColor;
-      ctx.lineWidth = bandHalf * 2;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
+      ctx.globalAlpha = 0.18 + warningProgress * 0.08;
+      ctx.fillStyle = cfg.warningColor;
+      if (isVertical) {
+        ctx.fillRect(effect.originX - bandHalf, arena.y, bandHalf * 2, arena.h);
+      } else {
+        ctx.fillRect(arena.x, effect.originY - bandHalf, arena.w, bandHalf * 2);
+      }
 
-      ctx.globalAlpha = 0.72 + 0.22 * pulse;
-      ctx.lineWidth = Math.max(2, ringRadius * 0.55);
+      ctx.globalAlpha = 0.76 + 0.18 * pulse;
+      ctx.strokeStyle = cfg.warningColor;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(endX, endY);
+      if (isVertical) {
+        ctx.moveTo(effect.originX, arena.y);
+        ctx.lineTo(effect.originX, arena.y + arena.h);
+      } else {
+        ctx.moveTo(arena.x, effect.originY);
+        ctx.lineTo(arena.x + arena.w, effect.originY);
+      }
       ctx.stroke();
     } else {
       const step = Math.max(13, ringRadius * 4);
-      const dist = Math.hypot(endX - segment.x1, endY - segment.y1);
+      const dist = beamLength;
       const fade = 1 - activeProgress;
       ctx.globalAlpha = 0.12 + fade * 0.12;
       ctx.strokeStyle = cfg.linkColor;
@@ -520,7 +521,7 @@ export function startGameLoop(
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(endX, endY);
+      ctx.lineTo(segment.x2, segment.y2);
       ctx.stroke();
 
       ctx.globalAlpha = 0.42 + fade * 0.58;
@@ -536,14 +537,6 @@ export function startGameLoop(
       }
       ctx.stroke();
     }
-
-    ctx.globalAlpha = 0.85;
-    ctx.fillStyle = effect.phase === "warning" ? cfg.warningColor : cfg.linkColor;
-    ctx.shadowColor = effect.phase === "warning" ? cfg.warningColor : cfg.linkColor;
-    ctx.shadowBlur = 18;
-    ctx.beginPath();
-    ctx.arc(effect.originX, effect.originY, ringRadius * 1.2, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.restore();
   }

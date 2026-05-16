@@ -15,6 +15,7 @@ import chainSfxTrack from "../assets/Metal-chain.mp3";
 type GameMode = "casual" | "practice" | "double";
 type RematchPhase = "idle" | "waiting" | "opponent_left" | "timeout";
 type MatchPhase = "playing" | "round_result" | "round_countdown" | "waiting_round" | "match_result";
+type MatchSide = "local" | "opponent";
 
 interface RoundTheme {
   encounter: EncounterConfig;
@@ -90,6 +91,7 @@ export default function GameCanvas({
   const matchTimersRef = useRef<number[]>([]);
   const pendingMatchResetRef = useRef(false);
   const roundNumberRef = useRef(1);
+  const roundWinsRef = useRef<[number, number]>([0, 0]);
   const mountedRef = useRef(true);
   const [gameOver, setGameOver] = useState(false);
   const [gameOverRoomId, setGameOverRoomId] = useState<string | undefined>(undefined);
@@ -99,8 +101,8 @@ export default function GameCanvas({
   const [roundNumber, setRoundNumber] = useState(1);
   const [roundWins, setRoundWins] = useState<[number, number]>([0, 0]);
   const [countdownValue, setCountdownValue] = useState<number | null>(null);
-  const [roundWinnerIdx, setRoundWinnerIdx] = useState<0 | 1 | null>(null);
-  const [matchWinnerIdx, setMatchWinnerIdx] = useState<0 | 1 | null>(null);
+  const [roundWinnerSide, setRoundWinnerSide] = useState<MatchSide | null>(null);
+  const [matchWinnerSide, setMatchWinnerSide] = useState<MatchSide | null>(null);
   const [roundTheme, setRoundTheme] = useState<RoundTheme>(() => getRoundTheme(localMatchSeedRef.current, 1));
 
   useEffect(() => {
@@ -110,6 +112,10 @@ export default function GameCanvas({
   useEffect(() => {
     roundNumberRef.current = roundNumber;
   }, [roundNumber]);
+
+  useEffect(() => {
+    roundWinsRef.current = roundWins;
+  }, [roundWins]);
 
   const isOnline = mode === "casual" && roomStart != null && guestId != null;
   const opponentPlayer = isOnline
@@ -137,7 +143,7 @@ export default function GameCanvas({
     setGameOver(false);
     setGameOverRoomId(undefined);
     setRematchPhase("idle");
-    setRoundWinnerIdx(null);
+    setRoundWinnerSide(null);
     setCountdownValue(null);
     setMatchPhase("playing");
   };
@@ -145,8 +151,9 @@ export default function GameCanvas({
   const beginLocalRound = (nextRoundNumber: number, resetMatch = false) => {
     if (resetMatch) {
       localMatchSeedRef.current = Math.floor(Math.random() * 2_147_483_647);
+      roundWinsRef.current = [0, 0];
       setRoundWins([0, 0]);
-      setMatchWinnerIdx(null);
+      setMatchWinnerSide(null);
       setRoundNumber(1);
       roundNumberRef.current = 1;
       setRoundPresentation(localMatchSeedRef.current, 1);
@@ -175,10 +182,11 @@ export default function GameCanvas({
     const nextSeed = roomStart?.seed ?? localMatchSeedRef.current;
     if (pendingMatchResetRef.current) {
       pendingMatchResetRef.current = false;
+      roundWinsRef.current = [0, 0];
       setRoundWins([0, 0]);
       setRoundNumber(1);
       roundNumberRef.current = 1;
-      setMatchWinnerIdx(null);
+      setMatchWinnerSide(null);
       setRoundPresentation(nextSeed, 1);
     } else {
       setRoundPresentation(nextSeed, roundNumberRef.current);
@@ -220,18 +228,20 @@ export default function GameCanvas({
   };
 
   const resolveRound = (deadIdx: 0 | 1) => {
-    const winnerIdx = (deadIdx === 0 ? 1 : 0) as 0 | 1;
-    const nextWins: [number, number] = [...roundWins];
-    nextWins[winnerIdx] += 1;
+    const winnerSide: MatchSide = deadIdx === localPlayerIdx ? "opponent" : "local";
+    const scoreIdx = winnerSide === "local" ? 0 : 1;
+    const nextWins: [number, number] = [...roundWinsRef.current];
+    nextWins[scoreIdx] += 1;
+    roundWinsRef.current = nextWins;
     setRoundWins(nextWins);
-    setRoundWinnerIdx(winnerIdx);
+    setRoundWinnerSide(winnerSide);
     setMatchPhase("round_result");
 
-    if (!bo3Enabled || nextWins[winnerIdx] >= BO3_TARGET_WINS) {
+    if (!bo3Enabled || nextWins[scoreIdx] >= BO3_TARGET_WINS) {
       clearMatchTimers();
       const timerId = window.setTimeout(() => {
         if (!mountedRef.current) return;
-        setMatchWinnerIdx(winnerIdx);
+        setMatchWinnerSide(winnerSide);
         setMatchPhase("match_result");
       }, bo3Enabled ? 2000 : 0);
       matchTimersRef.current.push(timerId);
@@ -388,11 +398,11 @@ export default function GameCanvas({
     };
   }, [mode, settings, runId, guestId, roomStart, isOnline, opponentIsBot, localPlayerIdx, opponentPlayer, roundTheme.encounter, roundNumber]);
 
-  const myScore = roundWins[localPlayerIdx] ?? roundWins[0];
-  const opponentScore = roundWins[(1 - localPlayerIdx) as 0 | 1] ?? roundWins[1];
-  const finalOutcome = matchWinnerIdx == null
+  const myScore = roundWins[0];
+  const opponentScore = roundWins[1];
+  const finalOutcome = matchWinnerSide == null
     ? null
-    : matchWinnerIdx === localPlayerIdx
+    : matchWinnerSide === "local"
       ? t("victory")
       : t("defeat");
   const scoreLine = `${t("youShort")} ${myScore}  -  ${t("opponentShort")} ${opponentScore}`;
@@ -417,7 +427,7 @@ export default function GameCanvas({
         <div style={containerStyle}>
           <p style={{ ...MSG_STYLE, fontSize: "15px", opacity: 0.72 }}>{t("roundResult")}</p>
           <p style={{ ...MSG_STYLE, fontSize: "42px", lineHeight: 1.05 }}>
-            {roundWinnerIdx === localPlayerIdx ? t("victory") : t("defeat")}
+            {roundWinnerSide === "local" ? t("victory") : t("defeat")}
           </p>
           <p style={{ ...MSG_STYLE, fontSize: "20px" }}>{scoreLine}</p>
         </div>

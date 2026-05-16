@@ -322,8 +322,32 @@ function HelpView({
 
           <section className="settings-card settings-card--wide">
             <h2 className="settings-heading">{t("helpHazardsTitle")}</h2>
+            <p className="help-copy">{t("helpHazardsBody")}</p>
+          </section>
+
+          <section className="settings-card settings-card--wide">
+            <h2 className="settings-heading">{t("helpChainsTitle")}</h2>
             <div className="help-list">
-              <p className="help-copy">{t("helpHazardsBody")}</p>
+              {([
+                ["helpChainNormalTitle", "helpChainNormalBody"],
+                ["helpChainRushTitle", "helpChainRushBody"],
+                ["helpChainTurnTitle", "helpChainTurnBody"],
+                ["helpChainFakeTitle", "helpChainFakeBody"],
+                ["helpChainGiantTitle", "helpChainGiantBody"],
+                ["helpChainTrackingTitle", "helpChainTrackingBody"],
+                ["helpChainPhaseTitle", "helpChainPhaseBody"],
+              ] as const).map(([titleKey, bodyKey]) => (
+                <div key={titleKey} className="help-entry">
+                  <h3 className="help-entry-title">{t(titleKey)}</h3>
+                  <p className="help-copy">{t(bodyKey)}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2 className="settings-heading">{t("helpItemsTitle")}</h2>
+            <div className="help-list">
               <p className="help-copy">{t("helpItemsBody")}</p>
               <p className="help-copy">{t("helpPracticeBody")}</p>
             </div>
