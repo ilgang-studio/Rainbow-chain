@@ -83,7 +83,7 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     warningColor:          "#ff9a1f",
     linkColor:             "#ffb347",
     phaseVisibleDuration:  0.7,
-    phaseHiddenDuration:   0.5,
+    phaseHiddenDuration:   1.5,
     phaseFadeDuration:     0.12,
   },
 };

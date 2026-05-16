@@ -26,6 +26,18 @@ function spawnCount(gameTime: number): number {
   return 1;
 }
 
+function practiceSpawnIntervalMultiplier(gameTime: number): number {
+  if (gameTime < 30) return 1.55;
+  if (gameTime < 60) return 1.3;
+  if (gameTime < 90) return 1.08;
+  return 0.9;
+}
+
+function practiceSpawnBonus(gameTime: number): number {
+  if (gameTime < 120) return 0;
+  return 1;
+}
+
 function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig | null): void {
   const orientation: Orientation = rng() < 0.5 ? "horizontal" : "vertical";
   const pad = Math.min(arena.w, arena.h) * 0.15;
@@ -220,11 +232,11 @@ export function updateWarnings(
   const practiceMode = options?.practiceMode ?? false;
   const interval =
     currentSpawnInterval(gameTime)
-    * (practiceMode ? 0.58 : 1)
+    * (practiceMode ? practiceSpawnIntervalMultiplier(gameTime) : 1)
     * (encounter?.modifiers.chainSpawnIntervalMultiplier ?? 1);
   const count =
     spawnCount(gameTime)
-    + (practiceMode ? 1 : 0)
+    + (practiceMode ? practiceSpawnBonus(gameTime) : 0)
     + (encounter?.modifiers.chainSpawnCountBonus ?? 0);
 
   for (let i = 0; i < (practiceMode ? 1 : 2); i++) {

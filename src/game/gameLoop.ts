@@ -19,7 +19,7 @@ import type {
   ItemSpawnedPayload,
   PlayerStatePayload,
 } from "../network/events";
-import { DEFAULT_BATTLE_CONFIG, type BattleConfig } from "../shared/battle";
+import { CHAIN_TYPES, DEFAULT_BATTLE_CONFIG, type BattleConfig, type ChainType } from "../shared/battle";
 
 const MAX_DT = 1 / 30;
 const AUTHORITATIVE_ITEM_SIZE = 13;
@@ -65,6 +65,7 @@ export function startGameLoop(
     online?: OnlineGameOptions;
     battleConfig?: BattleConfig;
     encounterTheme?: EncounterConfig | null;
+    authoritativeSeed?: number;
   },
   onGameOverChange?: (next: { isGameOver: boolean; deadIdx?: 0 | 1 }) => void,
 ): () => void {
@@ -156,6 +157,37 @@ export function startGameLoop(
 
   function getArenaIdxForServerX(x: number): 0 | 1 {
     return x < serverLaneWidth ? 0 : 1;
+  }
+
+  function nextSeededRandom(state: { value: number }): number {
+    let t = state.value += 0x6d2b79f5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  }
+
+  function createInitialAuthoritativeItem(seed: number): BattleItemSnapshot {
+    const rngState = { value: seed >>> 0 };
+    const typeIndex = Math.floor(nextSeededRandom(rngState) * CHAIN_TYPES.length);
+    const chainType = (CHAIN_TYPES[typeIndex] ?? CHAIN_TYPES[0]) as ChainType;
+    const spawnMargin = 96;
+    const serverX = spawnMargin + nextSeededRandom(rngState) * (battleConfig.worldWidth - spawnMargin * 2);
+    const serverY = spawnMargin + nextSeededRandom(rngState) * (battleConfig.worldHeight - spawnMargin * 2);
+    const arenaIdx = getArenaIdxForServerX(serverX);
+    const mapped = mapServerPointToClient(arenaIdx, serverX, serverY);
+    return {
+      itemId: `seeded-${seed}`,
+      chainType,
+      x: mapped.x,
+      y: mapped.y,
+      active: true,
+      respawnAt: null,
+      pickedByGuestId: null,
+    };
+  }
+
+  if (useServerBattle && options?.authoritativeSeed != null) {
+    authoritativeItem = createInitialAuthoritativeItem(options.authoritativeSeed);
   }
 
   const handlePlayerMoved = (data: unknown) => {
@@ -809,6 +841,8 @@ export function startGameLoop(
             arenas[oppIdx],
             arenas[online.localIdx],
             items[oppIdx],
+            oppIdx,
+            online.localIdx,
           );
           if (aiUseChain && players[oppIdx].hasChain) {
             players[oppIdx].hasChain = false;
@@ -850,7 +884,7 @@ export function startGameLoop(
       } else {
         updatePlayer(players[0], dt, arenas[0]);
         if (enableAi) {
-          const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], arenas[0], items[1]);
+          const aiUseChain = updateArenaAi(arenaAi, dt, players[1], players[0], arenas[1], arenas[0], items[1], 1, 0);
           if (aiUseChain && players[1].hasChain) {
             players[1].hasChain = false;
             fireChain(0, arenas, players[1].chainType, currentEncounter);

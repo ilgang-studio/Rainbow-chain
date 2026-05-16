@@ -269,6 +269,7 @@ function scoreCandidateMove(
   player: Player,
   enemy: Player,
   arena: Arena,
+  arenaIdx: 0 | 1,
   item: Item,
   dirX: number,
   dirY: number,
@@ -290,7 +291,7 @@ function scoreCandidateMove(
       y: player.y + move.y * player.speed * 0.88 * t,
       radius: player.radius,
     }, arena);
-    const danger = senseDanger(projected, arena, 1);
+    const danger = senseDanger(projected, arena, arenaIdx);
     score -= danger.score * weights[i];
     const wallClearance = getWallClearance(projected, arena);
     score += Math.min(wallClearance, 118) * 0.0032 * weights[i];
@@ -317,7 +318,7 @@ function scoreCandidateMove(
       y: lastProjected.y + toItem.y * 68,
       radius: player.radius,
     }, arena);
-    const pathDanger = senseDanger(pathProbe, arena, 1);
+    const pathDanger = senseDanger(pathProbe, arena, arenaIdx);
     score -= pathDanger.score * 0.42;
   } else {
     const shadowX = enemy.x - enemy.radius * 0.45;
@@ -342,9 +343,10 @@ function chooseObservedMove(
   player: Player,
   enemy: Player,
   arena: Arena,
+  arenaIdx: 0 | 1,
   item: Item,
 ): { x: number; y: number } {
-  const danger = senseDanger(player, arena, 1);
+  const danger = senseDanger(player, arena, arenaIdx);
   const candidates: Array<{ x: number; y: number }> = [];
 
   if (danger.score > 0.12) {
@@ -381,7 +383,7 @@ function chooseObservedMove(
   for (const candidate of candidates) {
     const move = normalize(candidate.x, candidate.y);
     if (Math.abs(move.x) <= 0.0001 && Math.abs(move.y) <= 0.0001) continue;
-    const score = scoreCandidateMove(ai, player, enemy, arena, item, move.x, move.y);
+    const score = scoreCandidateMove(ai, player, enemy, arena, arenaIdx, item, move.x, move.y);
     if (score > bestScore) {
       bestScore = score;
       bestMove = move;
@@ -429,6 +431,8 @@ export function updateArenaAi(
   arena: Arena,
   enemyArena: Arena,
   item: Item,
+  arenaIdx: 0 | 1 = 1,
+  enemyArenaIdx: 0 | 1 = 0,
 ): boolean {
   ai.observeTimer -= dt;
   ai.mistakeTimer -= dt;
@@ -442,8 +446,8 @@ export function updateArenaAi(
   }
 
   if (ai.observeTimer <= 0) {
-    const currentDanger = senseDanger(player, arena, 1);
-    const nextMove = chooseObservedMove(ai, player, enemy, arena, item);
+    const currentDanger = senseDanger(player, arena, arenaIdx);
+    const nextMove = chooseObservedMove(ai, player, enemy, arena, arenaIdx, item);
     const blended = normalize(ai.moveX * 0.28 + nextMove.x * 0.72, ai.moveY * 0.28 + nextMove.y * 0.72);
     ai.moveX = blended.x;
     ai.moveY = blended.y;
@@ -464,7 +468,7 @@ export function updateArenaAi(
     moveY = corrected.y;
   }
 
-  const immediateDanger = senseDanger(player, arena, 1);
+  const immediateDanger = senseDanger(player, arena, arenaIdx);
   const moveSpeedScale = immediateDanger.score > 0.85 ? 0.96 : 0.9;
   const dist = player.speed * moveSpeedScale * dt;
   player.x += moveX * dist;
@@ -483,7 +487,7 @@ export function updateArenaAi(
   ai.useTimer += dt;
   if (ai.useTimer < ai.useDelay) return false;
   const currentDanger = senseDanger(player, arena, 1);
-  const enemyDanger = senseDanger(enemy, enemyArena, 0);
+  const enemyDanger = senseDanger(enemy, enemyArena, enemyArenaIdx);
   const enemyWallClearance = getWallClearance(enemy, enemyArena);
   const enemyNearWall = enemyWallClearance < 60;
   const enemyBias = Math.abs(enemy.y - player.y) < arena.h * 0.2 || Math.abs(enemy.x - player.x) < arena.w * 0.2;
