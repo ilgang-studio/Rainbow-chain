@@ -974,8 +974,8 @@ export default function App() {
       }, 850);
     };
 
-    const handleRoomStart = (payload: RoomStartPayload) => {
-      console.log("[room:start] received", payload.roomId, "seed:", payload.seed);
+    const handleRoundPayload = (eventName: "room:start" | "round:start", payload: RoomStartPayload) => {
+      console.log(`[${eventName}] received`, payload.roomId, "round:", payload.round, "seed:", payload.seed);
       clearTransitionTimers();
       // 리매치: 이미 게임 뷰에 있으면 화면 전환 없이 room 데이터만 교체
       if (selectedModeRef.current !== null) {
@@ -989,6 +989,14 @@ export default function App() {
         setView("menu");
         setSelectedMode("casual");
       });
+    };
+
+    const handleRoomStart = (payload: RoomStartPayload) => {
+      handleRoundPayload("room:start", payload);
+    };
+
+    const handleRoundStart = (payload: RoomStartPayload) => {
+      handleRoundPayload("round:start", payload);
     };
 
     const handleSocketError = ({ message }: ErrorPayload) => {
@@ -1005,6 +1013,7 @@ export default function App() {
     socket.on("match:found", handleMatchFound);
     socket.on("match:ai_fallback", handleAiFallback);
     socket.on("room:start", handleRoomStart);
+    socket.on("round:start", handleRoundStart);
     socket.on("error", handleSocketError);
 
     return () => {
@@ -1016,6 +1025,7 @@ export default function App() {
       socket.off("match:found", handleMatchFound);
       socket.off("match:ai_fallback", handleAiFallback);
       socket.off("room:start", handleRoomStart);
+      socket.off("round:start", handleRoundStart);
       socket.off("error", handleSocketError);
     };
   }, []);

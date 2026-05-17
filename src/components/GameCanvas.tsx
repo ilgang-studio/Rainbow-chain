@@ -7,7 +7,13 @@ import { createPlayers } from "../game/player";
 import { startGameLoop } from "../game/gameLoop";
 import { seedRng, resetRng } from "../game/rng";
 import { socket } from "../network/socket";
-import type { RoomStartPayload } from "../network/events";
+import type {
+  MatchEndPayload,
+  PlayerAwayNoticePayload,
+  PlayerBackNoticePayload,
+  RoomStartPayload,
+  RoundEndPayload,
+} from "../network/events";
 import { DEFAULT_BATTLE_CONFIG } from "../shared/battle";
 import type { AppSettings } from "../settings";
 import chainSfxTrack from "../assets/Metal-chain.mp3";
@@ -90,6 +96,7 @@ export default function GameCanvas({
   const localMatchSeedRef = useRef(Math.floor(Math.random() * 2_147_483_647));
   const matchTimersRef = useRef<number[]>([]);
   const pendingMatchResetRef = useRef(false);
+  const awaySentRef = useRef(false);
   const roundNumberRef = useRef(1);
   const roundWinsRef = useRef<[number, number]>([0, 0]);
   const mountedRef = useRef(true);
@@ -104,6 +111,8 @@ export default function GameCanvas({
   const [roundWinnerSide, setRoundWinnerSide] = useState<MatchSide | null>(null);
   const [matchWinnerSide, setMatchWinnerSide] = useState<MatchSide | null>(null);
   const [roundTheme, setRoundTheme] = useState<RoundTheme>(() => getRoundTheme(localMatchSeedRef.current, 1));
+  const [opponentAwayDeadline, setOpponentAwayDeadline] = useState<number | null>(null);
+  const [opponentAwaySeconds, setOpponentAwaySeconds] = useState<number | null>(null);
 
   useEffect(() => {
     roomStartRef.current = roomStart;
@@ -132,6 +141,28 @@ export default function GameCanvas({
     for (const timerId of matchTimersRef.current) window.clearTimeout(timerId);
     matchTimersRef.current = [];
   };
+
+  const getWinsFromScore = (score?: Record<string, number>): [number, number] => {
+    if (!isOnline || !guestId || !roomStart) return [0, 0];
+    const opponentGuestId = roomStart.players.find((player) => player.guestId !== guestId)?.guestId;
+    return [
+      score?.[guestId] ?? 0,
+      opponentGuestId ? (score?.[opponentGuestId] ?? 0) : 0,
+    ];
+  };
+
+  useEffect(() => {
+    if (!isOnline || !roomStart) return;
+    const syncedWins = getWinsFromScore(roomStart.score);
+    roundWinsRef.current = syncedWins;
+    setRoundWins(syncedWins);
+    roundNumberRef.current = roomStart.round;
+    setRoundNumber(roomStart.round);
+    if (roomStart.roundState === "playing") {
+      setRoundPresentation(roomStart.seed, roomStart.round);
+      resetRoundSurface();
+    }
+  }, [guestId, isOnline, roomStart]);
 
   const setRoundPresentation = (seed: number, nextRoundNumber: number) => {
     const theme = getRoundTheme(seed, nextRoundNumber);
@@ -174,6 +205,7 @@ export default function GameCanvas({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      awaySentRef.current = false;
       clearMatchTimers();
     };
   }, []);
@@ -196,6 +228,30 @@ export default function GameCanvas({
       clearMatchTimers();
     };
   }, [roomStart?.seed, roomStart?.roomId]);
+
+  useEffect(() => {
+    if (!isRoundRematchable || !roomStart?.roomId) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (!awaySentRef.current) {
+          socket.emit("player:away", { roomId: roomStart.roomId });
+          awaySentRef.current = true;
+        }
+        return;
+      }
+
+      if (awaySentRef.current) {
+        socket.emit("player:back", { roomId: roomStart.roomId });
+        awaySentRef.current = false;
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isRoundRematchable, roomStart?.roomId]);
 
   const scheduleNextRound = (nextRoundNumber: number) => {
     clearMatchTimers();
@@ -297,6 +353,68 @@ export default function GameCanvas({
   }, [isRoundRematchable, onGoToQueue]);
 
   useEffect(() => {
+    if (!isRoundRematchable || !opponentPlayer || !guestId || !roomStart?.roomId) return;
+
+    const handlePlayerAway = (payload: PlayerAwayNoticePayload) => {
+      if (payload.playerId !== opponentPlayer.guestId) return;
+      const deadline = Date.now() + payload.timeout;
+      setOpponentAwayDeadline(deadline);
+      setOpponentAwaySeconds(Math.max(0, Math.ceil(payload.timeout / 1000)));
+    };
+
+    const handlePlayerBack = (payload: PlayerBackNoticePayload) => {
+      if (payload.playerId !== opponentPlayer.guestId) return;
+      setOpponentAwayDeadline(null);
+      setOpponentAwaySeconds(null);
+    };
+
+    const handleRoundEnd = (payload: RoundEndPayload) => {
+      if (payload.roomId !== roomStart.roomId) return;
+      const syncedWins = getWinsFromScore(payload.score);
+      roundWinsRef.current = syncedWins;
+      setRoundWins(syncedWins);
+      setOpponentAwayDeadline(null);
+      setOpponentAwaySeconds(null);
+    };
+
+    const handleMatchEnd = (payload: MatchEndPayload) => {
+      if (payload.roomId !== roomStart.roomId) return;
+      const syncedWins = getWinsFromScore(payload.score);
+      roundWinsRef.current = syncedWins;
+      setRoundWins(syncedWins);
+      setMatchWinnerSide(payload.winnerGuestId === guestId ? "local" : "opponent");
+      setMatchPhase("match_result");
+      setOpponentAwayDeadline(null);
+      setOpponentAwaySeconds(null);
+    };
+
+    socket.on("player:away", handlePlayerAway);
+    socket.on("player:back", handlePlayerBack);
+    socket.on("round:end", handleRoundEnd);
+    socket.on("match:end", handleMatchEnd);
+
+    return () => {
+      socket.off("player:away", handlePlayerAway);
+      socket.off("player:back", handlePlayerBack);
+      socket.off("round:end", handleRoundEnd);
+      socket.off("match:end", handleMatchEnd);
+    };
+  }, [guestId, isRoundRematchable, opponentPlayer, roomStart?.roomId]);
+
+  useEffect(() => {
+    if (opponentAwayDeadline == null) return;
+    const updateCountdown = () => {
+      const next = Math.max(0, Math.ceil((opponentAwayDeadline - Date.now()) / 1000));
+      setOpponentAwaySeconds(next);
+    };
+    updateCountdown();
+    const timerId = window.setInterval(updateCountdown, 250);
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [opponentAwayDeadline]);
+
+  useEffect(() => {
     const canvas = canvasRef.current!;
     if (!chainAudioRef.current) {
       chainAudioRef.current = new Audio(chainSfxTrack);
@@ -387,6 +505,8 @@ export default function GameCanvas({
       if (!isGameOver || deadIdx == null) return;
       setGameOverRoomId(roomStart?.roomId);
       setRematchPhase("idle");
+      setOpponentAwayDeadline(null);
+      setOpponentAwaySeconds(null);
       resolveRound(deadIdx);
     });
 
@@ -562,6 +682,27 @@ export default function GameCanvas({
           position: "fixed",
         }}
       />
+      {isRoundRematchable && opponentAwaySeconds != null ? (
+        <div
+          style={{
+            position: "fixed",
+            top: "26px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 24,
+            padding: "12px 18px",
+            border: "1px solid rgba(255,255,255,0.28)",
+            background: "rgba(0,0,0,0.74)",
+            color: "#fff",
+            font: '700 16px/1.1 "Avenir Next", "Helvetica Neue", Arial, sans-serif',
+            letterSpacing: "0.03em",
+            textAlign: "center",
+            boxShadow: "0 0 18px rgba(255,255,255,0.12)",
+          }}
+        >
+          {t("opponentAwayCountdown", { count: opponentAwaySeconds })}
+        </div>
+      ) : null}
       {renderGameOverOverlay()}
     </div>
   );

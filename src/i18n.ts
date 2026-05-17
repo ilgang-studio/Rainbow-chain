@@ -46,6 +46,7 @@ const translations = {
     rematch: "REMATCH",
     waitingForOpponent: "Waiting for opponent...",
     opponentLeft: "Opponent left. Searching new match...",
+    opponentAwayCountdown: "Opponent disconnected. %{count}s remaining...",
     searchingNewMatch: "Searching new match...",
     settingsTitle: "Settings",
     helpTitle: "Help",
@@ -112,96 +113,155 @@ const translations = {
   },
   ko: {
     casual: "캐주얼",
-    double: "더블",
+    double: "로컬 대전",
     practice: "연습",
     settings: "설정",
     help: "도움말",
-    loading: "로딩 중",
+
+    loading: "LOADING",
     matchmaking: "매칭 중",
-    deployingAi: "AI 배치 중",
-    searching: "탐색 중",
+
+    deployingAi: "AI 상대 배치 중",
+    searching: "탐색 중...",
+
     casualMatchmaking: "캐주얼 매칭",
-    matchFound: "매칭 완료",
-    aiMatch: "AI 매칭",
+    matchFound: "MATCH FOUND",
+    aiMatch: "AI MATCH",
+
     searchingOpponent: "상대방을 찾는 중...",
-    connectingToServer: "매칭 서버에 연결 중...",
+    connectingToServer: "매칭 서버 연결 중...",
+
     cancel: "취소",
-    restart: "재시작",
-    main: "메인",
+
+    restart: "리매치",
+
+    main: "메인 메뉴",
     mainMenu: "메인 메뉴",
-    round: "라운드",
-    roundResult: "라운드 결과",
-    finalScore: "최종 점수",
-    youShort: "나",
-    opponentShort: "상대",
-    victory: "승리",
-    defeat: "패배",
-    preparingNextRound: "다음 라운드를 준비 중...",
-    nextRoundIn: "%{count}초 후 다음 라운드",
-    rematch: "리매치",
+
+    round: "ROUND",
+    roundResult: "ROUND RESULT",
+    finalScore: "FINAL SCORE",
+
+    youShort: "YOU",
+    opponentShort: "OPP",
+
+    victory: "VICTORY",
+    defeat: "DEFEAT",
+
+    preparingNextRound: "다음 라운드 준비 중...",
+    nextRoundIn: "%{count}초 후 시작",
+
+    rematch: "REMATCH",
+
     waitingForOpponent: "상대방을 기다리는 중...",
-    opponentLeft: "상대방이 나갔습니다. 새 매칭 탐색 중...",
-    searchingNewMatch: "새 매칭 탐색 중...",
+
+    opponentLeft: "상대방이 연결을 종료했습니다.",
+    searchingNewMatch: "새로운 매치를 찾는 중...",
+
     settingsTitle: "설정",
     helpTitle: "도움말",
+
     helpPageBasics: "1장 · 기본",
-    helpPageChainsA: "2장 · 사슬 I",
-    helpPageChainsB: "3장 · 사슬 II",
-    helpPageItemsModes: "4장 · 아이템과 모드",
+    helpPageChainsA: "2장 · 체인 I",
+    helpPageChainsB: "3장 · 체인 II",
+    helpPageItemsModes: "4장 · 아이템 & 모드",
+
     helpPrev: "이전",
     helpNext: "다음",
+
     helpObjectiveTitle: "목표",
-    helpObjectiveBody: "사슬을 피하면서 오래 버티고, 상대가 먼저 맞도록 압박하세요.",
+    helpObjectiveBody:
+      "체인을 피하며 생존하고, 상대를 먼저 위험 구역에 몰아넣으세요.",
+
     helpControlsTitle: "조작",
-    helpControlsBody: "설정한 이동 키로 움직이고, 아이템을 먹은 뒤 사용 키로 사슬을 발사합니다.",
+    helpControlsBody:
+      "설정한 이동 키로 움직이며, 아이템 획득 후 사용 키로 체인을 발동합니다.",
+
     helpHazardsTitle: "아레나 규칙",
-    helpHazardsBody: "모든 사슬은 먼저 경고를 보여준 뒤 실제 타격 판정이 생깁니다. 시간이 지날수록 아레나 압박도 강해집니다.",
-    helpChainsTitle: "사슬 종류",
-    helpChainNormalTitle: "노말",
-    helpChainNormalBody: "가장 기본적인 직선 사슬입니다. 상대 아레나를 곧게 가로지릅니다.",
+    helpHazardsBody:
+      "모든 체인은 먼저 경고를 표시한 뒤 실제 공격 판정이 활성화됩니다. 시간이 지날수록 아레나 압박은 강해집니다.",
+
+    helpChainsTitle: "체인 종류",
+
+    helpChainNormalTitle: "노멀",
+    helpChainNormalBody:
+      "가장 기본적인 직선 체인입니다. 상대 아레나를 곧게 가로지릅니다.",
+
     helpChainRushTitle: "러시",
-    helpChainRushBody: "빨간 사슬입니다. 경고가 짧고 매우 빠르게 들어옵니다.",
+    helpChainRushBody:
+      "경고 시간이 매우 짧은 고속 돌진 체인입니다.",
+
     helpChainTurnTitle: "턴",
-    helpChainTurnBody: "한 번 꺾이는 L자 사슬입니다. 첫 줄만 피하면 두 번째 줄에 걸릴 수 있습니다.",
+    helpChainTurnBody:
+      "한 번 꺾이는 L자형 체인입니다. 첫 번째 라인을 피해도 두 번째 라인에 걸릴 수 있습니다.",
+
     helpChainFakeTitle: "페이크",
-    helpChainFakeBody: "보라색 교란 사슬입니다. 가짜 위치를 먼저 보여주고 진짜 라인이 따라옵니다.",
+    helpChainFakeBody:
+      "가짜 경고 위치를 먼저 보여준 뒤 진짜 공격이 따라오는 교란형 체인입니다.",
+
     helpChainGiantTitle: "자이언트",
-    helpChainGiantBody: "파란 대형 사슬입니다. 판정 폭이 넓어서 공간을 크게 막습니다.",
+    helpChainGiantBody:
+      "매우 넓은 범위를 차단하는 거대 체인입니다.",
+
     helpChainTrackingTitle: "트래킹",
-    helpChainTrackingBody: "초록 추적 사슬입니다. 발동 후 목표 쪽으로 꺾여 들어옵니다.",
+    helpChainTrackingBody:
+      "발동 이후 목표 방향으로 꺾여 들어오는 추적형 체인입니다.",
+
     helpChainPhaseTitle: "페이즈",
-    helpChainPhaseBody: "주황 사슬입니다. 잠깐 사라졌다가 같은 라인으로 다시 나타납니다.",
-    helpItemsTitle: "아이템 효과",
-    helpItemsBody: "아이템을 먹으면 무작위 사슬 1회를 저장합니다. 사용하면 상대 아레나의 무작위 위치에 무작위 사슬이 생성됩니다.",
+    helpChainPhaseBody:
+      "잠시 사라졌다가 같은 라인으로 다시 나타나는 위상 체인입니다.",
+
+    helpItemsTitle: "아이템",
+    helpItemsBody:
+      "아이템을 획득하면 무작위 체인 1개를 저장합니다. 사용 시 상대 아레나의 무작위 위치에 체인이 생성됩니다.",
+
     helpPracticeTitle: "연습 모드",
-    helpPracticeBody: "연습 모드는 초반 난도를 낮춰서 거리감과 회피 타이밍을 익히기 좋게 시작합니다.",
+    helpPracticeBody:
+      "초반 난도가 낮아 거리 감각과 회피 타이밍을 익히기 좋습니다.",
+
     helpModesTitle: "모드",
-    helpModesBody: "캐주얼은 온라인 매칭, 더블은 로컬 2인, 연습은 솔로 생존 모드입니다.",
+    helpModesBody:
+      "캐주얼은 온라인 매칭, 로컬 대전은 같은 기기 2인 플레이, 연습은 솔로 생존 모드입니다.",
+
     back: "뒤로",
+
     nicknameSetting: "닉네임",
     guestName: "게스트 이름",
+
     languageSetting: "언어",
+
     keySettings: "키 설정",
-    pressKey: "키를 누르세요...",
+    pressKey: "키를 입력하세요...",
+
     sound: "사운드",
+
     glowParticle: "글로우 / 파티클",
     glow: "글로우",
     particle: "파티클",
+
     enterNickname: "닉네임을 입력해주세요.",
+
     start: "시작",
-    encounterLabel: "조우",
+
+    encounterLabel: "ENCOUNTER",
+
     encounter: {
       chainStorm: {
-        name: "체인 폭풍",
-        description: "아레나 전체에서 체인이 더 빠르게 생성됩니다.",
+        name: "체인 스톰",
+        description:
+          "아레나 전체에서 체인 생성 속도가 증가합니다.",
       },
+
       itemFever: {
         name: "아이템 피버",
-        description: "아이템이 더 자주 생성되어 끊임없이 획득할 수 있습니다.",
+        description:
+          "아이템 생성 빈도가 크게 증가합니다.",
       },
+
       overclock: {
         name: "오버클록",
-        description: "경고가 끝나면 체인이 더 빠르게 발사됩니다.",
+        description:
+          "경고 종료 후 체인 발사 속도가 증가합니다.",
       },
     },
   },
@@ -236,6 +296,7 @@ const translations = {
     rematch: "リマッチ",
     waitingForOpponent: "対戦相手を待っています...",
     opponentLeft: "相手が退出しました。新しいマッチを探しています...",
+    opponentAwayCountdown: "相手の接続が切れました。残り %{count} 秒...",
     searchingNewMatch: "新しいマッチを探しています...",
     settingsTitle: "設定",
     helpTitle: "ヘルプ",
@@ -331,6 +392,7 @@ const translations = {
     rematch: "再来一局",
     waitingForOpponent: "等待对手中...",
     opponentLeft: "对手已离开。正在搜索新对手...",
+    opponentAwayCountdown: "对手已断开连接。剩余 %{count} 秒...",
     searchingNewMatch: "正在搜索新对手...",
     settingsTitle: "设置",
     helpTitle: "帮助",

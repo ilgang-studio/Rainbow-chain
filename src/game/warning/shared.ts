@@ -93,6 +93,7 @@ export function getChainVisualConfig(chainType: string): ChainConfig {
 }
 
 export interface Zone {
+  chainId?: string;
   orientation: Orientation;
   centerPos:   number;
   arenaIdx:    0 | 1;
@@ -123,6 +124,7 @@ export interface Zone {
   mirrorTurnUp: boolean;
   mirrorTurnX: number;
   mirrorTurnLength: number;
+  warningDurationOverride?: number;
 }
 
 export const WARNING_DURATION    = 1.8;

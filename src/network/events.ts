@@ -1,6 +1,9 @@
 import type { PublicRoomPlayer } from "../shared/room";
 import type { BattleConfig, BattleStatus, ChainType } from "../shared/battle";
 
+export type RoundState = "waiting" | "playing" | "round_end" | "match_end";
+export type EncounterType = "pvp" | "ai";
+
 export interface QueueJoinPayload {
   mode: "casual";
   nickname: string;
@@ -41,11 +44,20 @@ export interface MatchAiFallbackPayload {
 export interface RoomStartPayload {
   roomId: string;
   seed: number;
+  currentSeed: number;
+  round: number;
+  roundState: RoundState;
+  encounter: EncounterType;
+  score: Record<string, number>;
   players: PublicRoomPlayer[];
   battleConfig: BattleConfig;
   initialBattleState: BattleStatePayload;
   initialItem: ItemSpawnedPayload | null;
+  roundWinnerGuestId: string | null;
+  matchWinnerGuestId: string | null;
 }
+
+export interface RoundStartPayload extends RoomStartPayload {}
 
 export interface ErrorPayload {
   message: string;
@@ -89,10 +101,16 @@ export interface BattleItemSnapshot {
 
 export interface BattleStatePayload {
   roomId: string;
+  round: number;
+  roundState: RoundState;
+  seed: number;
+  score: Record<string, number>;
   status: BattleStatus;
   players: BattlePlayerSnapshot[];
   item: BattleItemSnapshot | null;
   winnerGuestId: string | null;
+  roundWinnerGuestId: string | null;
+  matchWinnerGuestId: string | null;
   reason?: string;
   serverTime: number;
 }
@@ -149,6 +167,22 @@ export interface RoomEndPayload {
   reason?: string;
 }
 
+export interface RoundEndPayload {
+  roomId: string;
+  round: number;
+  winnerGuestId: string | null;
+  loserGuestId: string | null;
+  score: Record<string, number>;
+  reason?: string;
+}
+
+export interface MatchEndPayload {
+  roomId: string;
+  winnerGuestId: string | null;
+  score: Record<string, number>;
+  reason?: string;
+}
+
 export interface RematchRequestPayload {
   roomId: string;
 }
@@ -173,12 +207,31 @@ export interface OpponentLeftPayload {
   roomId: string;
 }
 
+export interface PlayerAwayPayload {
+  roomId: string;
+}
+
+export interface PlayerBackPayload {
+  roomId: string;
+}
+
+export interface PlayerAwayNoticePayload {
+  playerId: string;
+  timeout: number;
+}
+
+export interface PlayerBackNoticePayload {
+  playerId: string;
+}
+
 export interface ClientToServerEvents {
   "queue:join": (payload: QueueJoinPayload) => void;
   "queue:cancel": () => void;
   "room:ready": (payload: RoomReadyPayload) => void;
   "player:move": (payload: PlayerMovePayload) => void;
   "player:state": (payload: PlayerStatePayload) => void;
+  "player:away": (payload: PlayerAwayPayload) => void;
+  "player:back": (payload: PlayerBackPayload) => void;
   "chain:cast": (payload: ChainCastPayload) => void;
   "item:pickup": (payload: ItemPickupRequestPayload) => void;
   "game:over": (payload: GameOverClaimPayload) => void;
@@ -193,14 +246,19 @@ export interface ServerToClientEvents {
   "match:found": (payload: MatchFoundPayload) => void;
   "match:ai_fallback": (payload: MatchAiFallbackPayload) => void;
   "room:start": (payload: RoomStartPayload) => void;
+  "round:start": (payload: RoundStartPayload) => void;
   "error": (payload: ErrorPayload) => void;
   "battle:state": (payload: BattleStatePayload) => void;
   "player:moved": (payload: PlayerMovePayload) => void;
   "player:state": (payload: PlayerStatePayload) => void;
+  "player:away": (payload: PlayerAwayNoticePayload) => void;
+  "player:back": (payload: PlayerBackNoticePayload) => void;
   "item:spawned": (payload: ItemSpawnedPayload) => void;
   "chain:spawned": (payload: ChainSpawnPayload) => void;
   "chain:warning": (payload: ChainWarningPayload) => void;
   "item:picked": (payload: ItemPickedPayload) => void;
+  "round:end": (payload: RoundEndPayload) => void;
+  "match:end": (payload: MatchEndPayload) => void;
   "room:end": (payload: RoomEndPayload) => void;
   "rematch:waiting": (payload: RematchWaitingPayload) => void;
   "rematch:accepted": (payload: RematchAcceptedPayload) => void;

@@ -4,7 +4,7 @@ import { isKeyDown } from "./input";
 import type { Arena } from "./arena";
 import { drawArena } from "./arena";
 import { getRandomEncounter, type EncounterConfig } from "./encounter";
-import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getChainVisualConfig, getPhaseCycleVisual } from "./warning/index";
+import { updateWarnings, drawWarnings, getActiveChains, resetWarnings, fireChain, CHAIN_TYPE_IDS, CHAIN_CONFIGS, getPhaseCycleVisual, syncServerChain } from "./warning/index";
 import { createItems, updateItemsWithRate, drawItems, tryPickup } from "./item";
 import { drawFPS, drawTimer, drawGameOver, drawChainRing, drawEncounterIntro } from "./hud";
 import { createArenaAi, updateArenaAi } from "./ai";
@@ -26,22 +26,6 @@ const AUTHORITATIVE_ITEM_SIZE = 13;
 const POSITION_SNAP_DISTANCE = 120;
 const OPPONENT_POSITION_LERP = 0.22;
 const ITEM_PICKUP_RETRY_MS = 140;
-
-interface OnlineChainEffect {
-  chainId: string;
-  ownerGuestId: string;
-  chainType: string;
-  arenaIdx: 0 | 1;
-  originX: number;
-  originY: number;
-  dx: number;
-  dy: number;
-  phase: "warning" | "active";
-  removeAt: number;
-  warningAt: number;
-  fireAt: number;
-  firedAt?: number;
-}
 
 export interface OnlineGameOptions {
   localIdx: 0 | 1;
@@ -89,7 +73,6 @@ export function startGameLoop(
   let encounterIntroTimer = 3;
   let latestBattleState: BattleStatePayload | null = null;
   let authoritativeItem: BattleItemSnapshot | null = null;
-  const onlineChainEffects: OnlineChainEffect[] = [];
   const requestedItemAttempts = new Map<string, number>();
   let awaitingChainResolution = false;
   let serverClockOffsetMs = 0;
@@ -140,16 +123,6 @@ export function startGameLoop(
     const lane = getServerLaneRect(arenaIdx);
     const scaledDx = dx * (lane.w / arena.w);
     const scaledDy = dy * (lane.h / arena.h);
-    const len = Math.hypot(scaledDx, scaledDy);
-    if (len <= 0.0001) return { dx: 1, dy: 0 };
-    return { dx: scaledDx / len, dy: scaledDy / len };
-  }
-
-  function mapServerDirectionToClient(arenaIdx: 0 | 1, dx: number, dy: number): { dx: number; dy: number } {
-    const arena = arenas[arenaIdx];
-    const lane = getServerLaneRect(arenaIdx);
-    const scaledDx = dx * (arena.w / lane.w);
-    const scaledDy = dy * (arena.h / lane.h);
     const len = Math.hypot(scaledDx, scaledDy);
     if (len <= 0.0001) return { dx: 1, dy: 0 };
     return { dx: scaledDx / len, dy: scaledDy / len };
@@ -291,58 +264,34 @@ export function startGameLoop(
     }
   };
 
-  const upsertChainEffect = (
-    payload: ChainWarningPayload | ChainSpawnPayload,
-    phase: "warning" | "active",
-  ) => {
+  const applyServerChain = (payload: ChainWarningPayload | ChainSpawnPayload) => {
     const arenaIdx = getArenaIdxForServerX(payload.originX);
     const mappedOrigin = mapServerPointToClient(arenaIdx, payload.originX, payload.originY);
-    const mappedDirection = mapServerDirectionToClient(arenaIdx, payload.dx, payload.dy);
-    const fireAtLocal = toLocalTimeFromServer(payload.fireAt);
-    const firedAtLocal = "firedAt" in payload ? toLocalTimeFromServer(payload.firedAt) : undefined;
-    const activeVisualMs = Math.max(420, Math.round(battleConfig.chainWarningMs * 0.9));
-    const removeAt = phase === "warning"
-      ? fireAtLocal + 150
-      : (firedAtLocal ?? fireAtLocal) + activeVisualMs;
-    const existing = onlineChainEffects.find((effect) => effect.chainId === payload.chainId);
-    if (existing) {
-      existing.ownerGuestId = payload.ownerGuestId;
-      existing.chainType = payload.chainType;
-      existing.arenaIdx = arenaIdx;
-      existing.originX = mappedOrigin.x;
-      existing.originY = mappedOrigin.y;
-      existing.dx = mappedDirection.dx;
-      existing.dy = mappedDirection.dy;
-      existing.phase = phase;
-      existing.removeAt = removeAt;
-      existing.warningAt = payload.warningAt;
-      existing.fireAt = payload.fireAt;
-      existing.firedAt = "firedAt" in payload ? payload.firedAt : undefined;
-      return;
-    }
-    onlineChainEffects.push({
-      chainId: payload.chainId,
-      ownerGuestId: payload.ownerGuestId,
-      chainType: payload.chainType,
+    syncServerChain(
       arenaIdx,
-      originX: mappedOrigin.x,
-      originY: mappedOrigin.y,
-      dx: mappedDirection.dx,
-      dy: mappedDirection.dy,
-      phase,
-      removeAt,
-      warningAt: payload.warningAt,
-      fireAt: payload.fireAt,
-      firedAt: "firedAt" in payload ? payload.firedAt : undefined,
-    });
+      arenas[arenaIdx],
+      {
+        chainId: payload.chainId,
+        chainType: payload.chainType,
+        originX: mappedOrigin.x,
+        originY: mappedOrigin.y,
+        dx: payload.dx,
+        dy: payload.dy,
+        warningAt: toLocalTimeFromServer(payload.warningAt),
+        fireAt: toLocalTimeFromServer(payload.fireAt),
+        firedAt: "firedAt" in payload ? toLocalTimeFromServer(payload.firedAt) : undefined,
+        now: Date.now(),
+      },
+      currentEncounter,
+    );
   };
 
   const handleChainWarning = (data: unknown) => {
-    upsertChainEffect(data as ChainWarningPayload, "warning");
+    applyServerChain(data as ChainWarningPayload);
   };
 
   const handleChainSpawned = (data: unknown) => {
-    upsertChainEffect(data as ChainSpawnPayload, "active");
+    applyServerChain(data as ChainSpawnPayload);
   };
 
   if (online) {
@@ -387,10 +336,6 @@ export function startGameLoop(
     return serverTime + serverClockOffsetMs;
   }
 
-  function getApproxServerNow(): number {
-    return Date.now() - serverClockOffsetMs;
-  }
-
   function lerp(current: number, target: number, alpha: number): number {
     return current + (target - current) * alpha;
   }
@@ -427,118 +372,6 @@ export function startGameLoop(
       active: true,
       respawnTimer: 0,
     }]);
-  }
-
-  function getRayRectSegment(
-    originX: number,
-    originY: number,
-    dx: number,
-    dy: number,
-    range: number,
-    rect: Arena,
-  ): { x1: number; y1: number; x2: number; y2: number } | null {
-    let maxT = Math.max(0, range);
-    if (Math.abs(dx) > 0.0001) {
-      maxT = Math.min(maxT, dx > 0 ? (rect.x + rect.w - originX) / dx : (rect.x - originX) / dx);
-    }
-    if (Math.abs(dy) > 0.0001) {
-      maxT = Math.min(maxT, dy > 0 ? (rect.y + rect.h - originY) / dy : (rect.y - originY) / dy);
-    }
-    if (!Number.isFinite(maxT) || maxT <= 0) return null;
-    return {
-      x1: originX,
-      y1: originY,
-      x2: originX + dx * maxT,
-      y2: originY + dy * maxT,
-    };
-  }
-
-  function drawServerChainEffect(
-    ctx: CanvasRenderingContext2D,
-    effect: OnlineChainEffect,
-  ): void {
-    const arena = arenas[effect.arenaIdx];
-    const cfg = getChainVisualConfig(effect.chainType);
-    const len = Math.hypot(effect.dx, effect.dy);
-    if (len <= 0.0001) return;
-    const dx = effect.dx / len;
-    const dy = effect.dy / len;
-    const segment = getRayRectSegment(
-      effect.originX,
-      effect.originY,
-      dx,
-      dy,
-      Math.max(arena.w, arena.h) * 1.35,
-      arena,
-    );
-    if (!segment) return;
-    const approxServerNow = getApproxServerNow();
-    const warningDuration = Math.max(1, effect.fireAt - effect.warningAt);
-    const warningProgress = Math.max(0, Math.min(1, (approxServerNow - effect.warningAt) / warningDuration));
-    const activeVisualMs = Math.max(420, Math.round(battleConfig.chainWarningMs * 0.9));
-    const activeProgress = effect.firedAt == null
-      ? 0
-      : Math.max(0, Math.min(1, (approxServerNow - effect.firedAt) / activeVisualMs));
-    const beamLength = Math.hypot(segment.x2 - segment.x1, segment.y2 - segment.y1);
-    const bandHalf = Math.max(18, battleConfig.chainHitRadius * 0.5, cfg.bandHalfWidth ?? 0);
-    const ringRadius = Math.max(4, Math.min(10, battleConfig.chainHitRadius * 0.08, cfg.linkRadius ?? 5));
-    const pulse = 0.72 + 0.28 * Math.sin(approxServerNow / 90);
-    const isVertical = Math.abs(dy) > Math.abs(dx);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(arena.x, arena.y, arena.w, arena.h);
-    ctx.clip();
-
-    if (effect.phase === "warning") {
-      ctx.globalAlpha = 0.18 + warningProgress * 0.08;
-      ctx.fillStyle = cfg.warningColor;
-      if (isVertical) {
-        ctx.fillRect(effect.originX - bandHalf, arena.y, bandHalf * 2, arena.h);
-      } else {
-        ctx.fillRect(arena.x, effect.originY - bandHalf, arena.w, bandHalf * 2);
-      }
-
-      ctx.globalAlpha = 0.76 + 0.18 * pulse;
-      ctx.strokeStyle = cfg.warningColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      if (isVertical) {
-        ctx.moveTo(effect.originX, arena.y);
-        ctx.lineTo(effect.originX, arena.y + arena.h);
-      } else {
-        ctx.moveTo(arena.x, effect.originY);
-        ctx.lineTo(arena.x + arena.w, effect.originY);
-      }
-      ctx.stroke();
-    } else {
-      const step = Math.max(13, ringRadius * 4);
-      const dist = beamLength;
-      const fade = 1 - activeProgress;
-      ctx.globalAlpha = 0.12 + fade * 0.12;
-      ctx.strokeStyle = cfg.linkColor;
-      ctx.lineWidth = Math.max(ringRadius * 3.6, battleConfig.chainHitRadius * 0.22);
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(segment.x1, segment.y1);
-      ctx.lineTo(segment.x2, segment.y2);
-      ctx.stroke();
-
-      ctx.globalAlpha = 0.42 + fade * 0.58;
-      ctx.strokeStyle = cfg.linkColor;
-      ctx.lineWidth = 1.5;
-      ctx.lineCap = "butt";
-      ctx.beginPath();
-      for (let traveled = 0; traveled <= dist; traveled += step) {
-        const px = segment.x1 + dx * traveled;
-        const py = segment.y1 + dy * traveled;
-        ctx.moveTo(px + ringRadius, py);
-        ctx.arc(px, py, ringRadius, 0, Math.PI * 2);
-      }
-      ctx.stroke();
-    }
-
-    ctx.restore();
   }
 
   const items = createItems(arenas);
@@ -762,12 +595,6 @@ export function startGameLoop(
       }, currentEncounter);
     }
 
-    for (let i = onlineChainEffects.length - 1; i >= 0; i--) {
-      if (onlineChainEffects[i].removeAt <= Date.now()) {
-        onlineChainEffects.splice(i, 1);
-      }
-    }
-
     if (!isGameOver) {
 
       // ── 아이템 업데이트 ────────────────────
@@ -872,9 +699,6 @@ export function startGameLoop(
       drawItems(ctx, practiceMode ? [items[0]] : items);
     } else {
       drawAuthoritativeItem(ctx, authoritativeItem);
-      for (const effect of onlineChainEffects) {
-        drawServerChainEffect(ctx, effect);
-      }
     }
 
     for (let i = 0; i < playerCount; i++) {

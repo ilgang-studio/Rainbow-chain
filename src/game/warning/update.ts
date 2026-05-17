@@ -16,6 +16,28 @@ import {
 } from "./shared";
 import { zones, spawnTimers } from "./state";
 
+interface ZoneSeed {
+  chainId?: string;
+  orientation: Orientation;
+  centerPos: number;
+  direction: 1 | -1;
+  turnDir: 1 | -1;
+  turnRatio: number;
+  fakePos?: number;
+  phase?: Zone["phase"];
+  elapsed?: number;
+  warningDurationOverride?: number;
+}
+
+function hashToUnit(seed: string, salt: number): number {
+  let h = 2166136261 ^ salt;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 1000000) / 1000000;
+}
+
 function currentSpawnInterval(gameTime: number): number {
   return Math.max(1.15, 4.8 - gameTime * 0.02);
 }
@@ -38,27 +60,25 @@ function practiceSpawnBonus(gameTime: number): number {
   return 1;
 }
 
-function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig | null): void {
-  const orientation: Orientation = rng() < 0.5 ? "horizontal" : "vertical";
-  const pad = Math.min(arena.w, arena.h) * 0.15;
-  let centerPos = orientation === "vertical"
-    ? arena.x + pad + rng() * (arena.w - pad * 2)
-    : arena.y + pad + rng() * (arena.h - pad * 2);
-  const direction: 1 | -1 = rng() < 0.5 ? 1 : -1;
-  const turnDir: 1 | -1 = rng() < 0.5 ? 1 : -1;
+function buildZone(
+  arenaIdx: 0 | 1,
+  arena: Arena,
+  chainType = "normal",
+  encounter: EncounterConfig | null | undefined,
+  seed: ZoneSeed,
+): Zone {
+  const orientation = seed.orientation;
+  const direction = seed.direction;
+  const turnDir = seed.turnDir;
+  const turnRatio = seed.turnRatio;
   const isVert = orientation === "vertical";
-
-  const fakePos = centerPos;
-  if (chainType === "fake") {
-    const axisCenter = isVert ? arena.x + arena.w / 2 : arena.y + arena.h / 2;
-    centerPos = 2 * axisCenter - centerPos;
-  }
+  const centerPos = seed.centerPos;
+  const fakePos = seed.fakePos ?? centerPos;
 
   const fullLen = isVert ? arena.h : arena.w;
   const base = isVert ? arena.y : arena.x;
   const adjBase = base + LINK_R;
   const adjFullLen = fullLen - 2 * LINK_R;
-  const turnRatio = 0.4 + rng() * 0.2;
 
   let turnPoint: number;
   let seg1Len: number;
@@ -99,12 +119,13 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounte
   const trackTurned = false;
   const trackPoints = [{ x: trackHeadX, y: trackHeadY }];
 
-  zones.push({
+  return {
+    chainId: seed.chainId,
     orientation,
     centerPos,
     arenaIdx,
-    phase: "warning",
-    elapsed: 0,
+    phase: seed.phase ?? "warning",
+    elapsed: seed.elapsed ?? 0,
     direction,
     drawLength: 0,
     exitOffset: 0,
@@ -130,7 +151,130 @@ function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounte
     mirrorTurnUp: false,
     mirrorTurnX: 0,
     mirrorTurnLength: 0,
-  });
+    warningDurationOverride: seed.warningDurationOverride,
+  };
+}
+
+function getRandomSeed(arena: Arena): ZoneSeed {
+  const orientation: Orientation = rng() < 0.5 ? "horizontal" : "vertical";
+  const pad = Math.min(arena.w, arena.h) * 0.15;
+  const centerPos = orientation === "vertical"
+    ? arena.x + pad + rng() * (arena.w - pad * 2)
+    : arena.y + pad + rng() * (arena.h - pad * 2);
+  return {
+    orientation,
+    centerPos,
+    direction: rng() < 0.5 ? 1 : -1,
+    turnDir: rng() < 0.5 ? 1 : -1,
+    turnRatio: 0.4 + rng() * 0.2,
+  };
+}
+
+function spawnZone(arenaIdx: 0 | 1, arena: Arena, chainType = "normal", encounter?: EncounterConfig | null): void {
+  zones.push(buildZone(arenaIdx, arena, chainType, encounter, getRandomSeed(arena)));
+}
+
+function applyPhaseProgress(zone: Zone, arena: Arena): void {
+  const cfg = CHAIN_CONFIGS[zone.chainType] ?? CHAIN_CONFIGS.normal;
+  if (zone.phase === "extending" && zone.chainType !== "tracking") {
+    const lkR = cfg.linkRadius ?? LINK_R;
+    const maxLen = zone.chainType === "turn"
+      ? zone.seg1Len + zone.seg2Len
+      : (zone.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
+    const extendDuration = cfg.extendDuration / zone.speedMultiplier;
+    zone.drawLength = Math.min(maxLen, maxLen * (zone.elapsed / extendDuration));
+    return;
+  }
+
+  if (zone.phase === "active" && zone.chainType !== "tracking") {
+    const lkR = cfg.linkRadius ?? LINK_R;
+    zone.drawLength = zone.chainType === "turn"
+      ? zone.seg1Len + zone.seg2Len
+      : (zone.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
+    return;
+  }
+
+  if (zone.phase === "exiting" && zone.chainType !== "tracking" && zone.chainType !== "turn") {
+    const lkR = cfg.linkRadius ?? LINK_R;
+    const adjFullLen = (zone.orientation === "vertical" ? arena.h : arena.w) - 2 * lkR;
+    zone.exitOffset = adjFullLen * (zone.elapsed / cfg.exitDuration);
+  }
+}
+
+export function syncServerChain(
+  arenaIdx: 0 | 1,
+  arena: Arena,
+  payload: {
+    chainId: string;
+    chainType: string;
+    originX: number;
+    originY: number;
+    dx: number;
+    dy: number;
+    warningAt: number;
+    fireAt: number;
+    firedAt?: number;
+    now?: number;
+  },
+  encounter?: EncounterConfig | null,
+): void {
+  const cfg = CHAIN_CONFIGS[payload.chainType] ?? CHAIN_CONFIGS.normal;
+  const orientation: Orientation = Math.abs(payload.dy) > Math.abs(payload.dx) ? "vertical" : "horizontal";
+  const direction: 1 | -1 = orientation === "vertical"
+    ? (payload.dy >= 0 ? 1 : -1)
+    : (payload.dx >= 0 ? 1 : -1);
+  const centerPos = orientation === "vertical" ? payload.originX : payload.originY;
+  const axisCenter = orientation === "vertical" ? arena.x + arena.w / 2 : arena.y + arena.h / 2;
+  const fakePos = payload.chainType === "fake" ? 2 * axisCenter - centerPos : centerPos;
+  const warningLeadSec = Math.max(0, (payload.fireAt - payload.warningAt) / 1000 - FLASH_DURATION);
+  const nowMs = payload.now ?? Date.now();
+  const extendStartAt = payload.firedAt ?? payload.fireAt;
+  let phase: Zone["phase"] = "warning";
+  let elapsed = Math.max(0, (nowMs - payload.warningAt) / 1000);
+
+  if (nowMs >= payload.warningAt + warningLeadSec * 1000) {
+    phase = "flash";
+    elapsed = Math.max(0, (nowMs - (payload.warningAt + warningLeadSec * 1000)) / 1000);
+  }
+
+  if (nowMs >= extendStartAt) {
+    const extendingElapsed = Math.max(0, (nowMs - extendStartAt) / 1000);
+    const extendDuration = cfg.extendDuration;
+    const activeDuration = cfg.activeDuration;
+    if (extendingElapsed < extendDuration) {
+      phase = "extending";
+      elapsed = extendingElapsed;
+    } else if (extendingElapsed < extendDuration + activeDuration) {
+      phase = "active";
+      elapsed = extendingElapsed - extendDuration;
+    } else {
+      phase = "exiting";
+      elapsed = extendingElapsed - extendDuration - activeDuration;
+    }
+  }
+
+  const seed: ZoneSeed = {
+    chainId: payload.chainId,
+    orientation,
+    centerPos,
+    direction,
+    turnDir: hashToUnit(payload.chainId, 17) < 0.5 ? 1 : -1,
+    turnRatio: 0.4 + hashToUnit(payload.chainId, 31) * 0.2,
+    fakePos,
+    phase,
+    elapsed,
+    warningDurationOverride: warningLeadSec,
+  };
+
+  const nextZone = buildZone(arenaIdx, arena, payload.chainType, encounter, seed);
+  applyPhaseProgress(nextZone, arena);
+
+  const existingIdx = zones.findIndex((zone) => zone.chainId === payload.chainId);
+  if (existingIdx >= 0) {
+    zones[existingIdx] = nextZone;
+    return;
+  }
+  zones.push(nextZone);
 }
 
 function canMirrorBounce(z: Zone): boolean {
@@ -260,7 +404,9 @@ export function updateWarnings(
     z.elapsed += dt;
 
     if (z.phase === "warning") {
-      const wDur = (CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal).warningDuration ?? WARNING_DURATION;
+      const wDur = z.warningDurationOverride
+        ?? (CHAIN_CONFIGS[z.chainType] ?? CHAIN_CONFIGS.normal).warningDuration
+        ?? WARNING_DURATION;
       if (z.elapsed >= wDur) {
         z.phase = "flash";
         z.elapsed = 0;
