@@ -752,6 +752,22 @@ export default function App() {
     setMatchmakingDetail(t("searchingOpponent"));
   };
 
+  const fallbackMatchmakingToAi = (reason: string) => {
+    console.warn("[matchmaking:fallback_ai]", reason);
+    clearRoomReadyTimer();
+    pendingQueueJoinRef.current = null;
+    socket.disconnect();
+    clearTransitionTimers();
+    setTransitionActive(false);
+    transitionBusyRef.current = false;
+    runScreenTransition(t("deployingAi"), () => {
+      resetMatchmakingState();
+      setActiveRoomStart(null);
+      setView("menu");
+      setSelectedMode("casual");
+    });
+  };
+
   const runScreenTransition = (label: string, applyChange: () => void) => {
     if (transitionBusyRef.current) return;
     transitionBusyRef.current = true;
@@ -787,9 +803,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Socket authentication failed.";
       console.error("[socket:auth_error]", message);
-      pendingQueueJoinRef.current = null;
-      setMatchmakingStatus("QUEUE ERROR");
-      setMatchmakingDetail(message);
+      fallbackMatchmakingToAi(message);
     }
   };
 
@@ -860,16 +874,14 @@ export default function App() {
     const handleConnectError = (error: Error) => {
       console.error("[socket:connect_error]", error.message);
       if (viewRef.current !== "matchmaking") return;
-      setMatchmakingStatus("QUEUE ERROR");
-      setMatchmakingDetail(error.message || t("connectingToServer"));
+      fallbackMatchmakingToAi(error.message || t("connectingToServer"));
     };
 
     const handleDisconnect = (reason: string) => {
       console.warn("[socket:disconnect]", reason);
       if (viewRef.current !== "matchmaking") return;
       if (pendingQueueJoinRef.current == null) return;
-      setMatchmakingStatus("QUEUE ERROR");
-      setMatchmakingDetail(reason);
+      fallbackMatchmakingToAi(reason);
     };
 
     const handleQueueJoined = () => {
@@ -941,8 +953,7 @@ export default function App() {
     const handleSocketError = ({ message }: ErrorPayload) => {
       console.error(message);
       if (viewRef.current !== "matchmaking") return;
-      setMatchmakingStatus("QUEUE ERROR");
-      setMatchmakingDetail(message);
+      fallbackMatchmakingToAi(message);
     };
 
     socket.on("connect", handleConnect);
