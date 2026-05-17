@@ -527,6 +527,58 @@ body {
   gap: 14px;
 }
 
+.help-book {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 20px;
+}
+
+.help-book__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.help-book__chapter,
+.help-book__page {
+  color: rgba(255, 255, 255, 0.72);
+  font: 700 0.85rem/1 monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.help-book__grid {
+  min-height: 420px;
+}
+
+.help-book__nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.help-book__button {
+  min-width: 148px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(14, 14, 14, 0.9);
+  color: #ffffff;
+  font: 700 0.92rem/1 "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow:
+    0 0 calc(10px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.08),
+    inset 0 0 calc(12px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.help-book__button:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
 .help-entry {
   display: grid;
   gap: 6px;

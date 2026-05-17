@@ -297,6 +297,46 @@ function HelpView({
   particleCount: number;
   onBack: () => void;
 }) {
+  const pages = [
+    {
+      title: t("helpPageBasics"),
+      cards: [
+        { heading: t("helpObjectiveTitle"), body: t("helpObjectiveBody") },
+        { heading: t("helpControlsTitle"), body: t("helpControlsBody") },
+        { heading: t("helpHazardsTitle"), body: t("helpHazardsBody") },
+      ],
+    },
+    {
+      title: t("helpPageChainsA"),
+      cards: [
+        { heading: t("helpChainNormalTitle"), body: t("helpChainNormalBody") },
+        { heading: t("helpChainRushTitle"), body: t("helpChainRushBody") },
+        { heading: t("helpChainTurnTitle"), body: t("helpChainTurnBody") },
+        { heading: t("helpChainFakeTitle"), body: t("helpChainFakeBody") },
+      ],
+    },
+    {
+      title: t("helpPageChainsB"),
+      cards: [
+        { heading: t("helpChainGiantTitle"), body: t("helpChainGiantBody") },
+        { heading: t("helpChainTrackingTitle"), body: t("helpChainTrackingBody") },
+        { heading: t("helpChainPhaseTitle"), body: t("helpChainPhaseBody") },
+      ],
+    },
+    {
+      title: t("helpPageItemsModes"),
+      cards: [
+        { heading: t("helpItemsTitle"), body: t("helpItemsBody") },
+        { heading: t("helpPracticeTitle"), body: t("helpPracticeBody") },
+        { heading: t("helpModesTitle"), body: t("helpModesBody") },
+      ],
+    },
+  ] as const;
+  const [pageIndex, setPageIndex] = useState(0);
+  const page = pages[pageIndex] ?? pages[0];
+  const isFirstPage = pageIndex === 0;
+  const isLastPage = pageIndex === pages.length - 1;
+
   return (
     <main className="menu-shell">
       <section className="menu-frame settings-frame" aria-label="Help">
@@ -309,54 +349,41 @@ function HelpView({
           </button>
         </header>
 
-        <section className="settings-grid">
-          <section className="settings-card">
-            <h2 className="settings-heading">{t("helpObjectiveTitle")}</h2>
-            <p className="help-copy">{t("helpObjectiveBody")}</p>
+        <section className="help-book">
+          <div className="help-book__meta">
+            <span className="help-book__chapter">{page.title}</span>
+            <span className="help-book__page">
+              {pageIndex + 1} / {pages.length}
+            </span>
+          </div>
+
+          <section className="settings-grid help-book__grid">
+            {page.cards.map((card) => (
+              <section key={card.heading} className="settings-card">
+                <h2 className="settings-heading">{card.heading}</h2>
+                <p className="help-copy">{card.body}</p>
+              </section>
+            ))}
           </section>
 
-          <section className="settings-card">
-            <h2 className="settings-heading">{t("helpControlsTitle")}</h2>
-            <p className="help-copy">{t("helpControlsBody")}</p>
-          </section>
-
-          <section className="settings-card settings-card--wide">
-            <h2 className="settings-heading">{t("helpHazardsTitle")}</h2>
-            <p className="help-copy">{t("helpHazardsBody")}</p>
-          </section>
-
-          <section className="settings-card settings-card--wide">
-            <h2 className="settings-heading">{t("helpChainsTitle")}</h2>
-            <div className="help-list">
-              {([
-                ["helpChainNormalTitle", "helpChainNormalBody"],
-                ["helpChainRushTitle", "helpChainRushBody"],
-                ["helpChainTurnTitle", "helpChainTurnBody"],
-                ["helpChainFakeTitle", "helpChainFakeBody"],
-                ["helpChainGiantTitle", "helpChainGiantBody"],
-                ["helpChainTrackingTitle", "helpChainTrackingBody"],
-                ["helpChainPhaseTitle", "helpChainPhaseBody"],
-              ] as const).map(([titleKey, bodyKey]) => (
-                <div key={titleKey} className="help-entry">
-                  <h3 className="help-entry-title">{t(titleKey)}</h3>
-                  <p className="help-copy">{t(bodyKey)}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="settings-card">
-            <h2 className="settings-heading">{t("helpItemsTitle")}</h2>
-            <div className="help-list">
-              <p className="help-copy">{t("helpItemsBody")}</p>
-              <p className="help-copy">{t("helpPracticeBody")}</p>
-            </div>
-          </section>
-
-          <section className="settings-card">
-            <h2 className="settings-heading">{t("helpModesTitle")}</h2>
-            <p className="help-copy">{t("helpModesBody")}</p>
-          </section>
+          <div className="help-book__nav">
+            <button
+              type="button"
+              className="help-book__button"
+              onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+              disabled={isFirstPage}
+            >
+              {t("helpPrev")}
+            </button>
+            <button
+              type="button"
+              className="help-book__button"
+              onClick={() => setPageIndex((current) => Math.min(pages.length - 1, current + 1))}
+              disabled={isLastPage}
+            >
+              {t("helpNext")}
+            </button>
+          </div>
         </section>
       </section>
     </main>
