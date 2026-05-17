@@ -566,6 +566,8 @@ export default function App() {
   const roomReadyTimerRef = useRef<number | null>(null);
   const resetMatchmakingStateRef = useRef<() => void>(() => {});
   const runScreenTransitionRef = useRef<(label: string, applyChange: () => void) => void>(() => {});
+  const fallbackMatchmakingToAiRef = useRef<(reason: string) => void>(() => {});
+  const aiQueueTimeoutRef = useRef<number | null>(null);
   const transitionTimersRef = useRef<number[]>([]);
   const transitionBusyRef = useRef(false);
 
@@ -573,6 +575,9 @@ export default function App() {
     return () => {
       if (roomReadyTimerRef.current !== null) {
         window.clearTimeout(roomReadyTimerRef.current);
+      }
+      if (aiQueueTimeoutRef.current !== null) {
+        window.clearTimeout(aiQueueTimeoutRef.current);
       }
       for (const timerId of transitionTimersRef.current) window.clearTimeout(timerId);
       transitionTimersRef.current = [];
@@ -743,6 +748,13 @@ export default function App() {
     }
   };
 
+  const clearAiQueueTimeout = () => {
+    if (aiQueueTimeoutRef.current !== null) {
+      window.clearTimeout(aiQueueTimeoutRef.current);
+      aiQueueTimeoutRef.current = null;
+    }
+  };
+
   const resetMatchmakingState = () => {
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
@@ -754,6 +766,7 @@ export default function App() {
 
   const fallbackMatchmakingToAi = (reason: string) => {
     console.warn("[matchmaking:fallback_ai]", reason);
+    clearAiQueueTimeout();
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
     socket.disconnect();
@@ -810,12 +823,19 @@ export default function App() {
   const beginMatchmaking = (mode: QueueMode) => {
     const identity = ensureGuestIdentity();
     resetMatchmakingState();
+    clearAiQueueTimeout();
 
     const payload: QueueJoinPayload = {
       mode,
       nickname: identity.nickname,
       guestId: identity.guestId,
     };
+
+    aiQueueTimeoutRef.current = window.setTimeout(() => {
+      aiQueueTimeoutRef.current = null;
+      if (viewRef.current !== "matchmaking") return;
+      fallbackMatchmakingToAiRef.current("10s queue timeout");
+    }, 10_000);
 
     runScreenTransition(t("matchmaking"), () => {
       setView("matchmaking");
@@ -843,6 +863,7 @@ export default function App() {
 
 
   const cancelMatchmaking = () => {
+    clearAiQueueTimeout();
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
 
@@ -861,6 +882,7 @@ export default function App() {
   useEffect(() => {
     resetMatchmakingStateRef.current = resetMatchmakingState;
     runScreenTransitionRef.current = runScreenTransition;
+    fallbackMatchmakingToAiRef.current = fallbackMatchmakingToAi;
   });
 
   useEffect(() => {
@@ -896,6 +918,10 @@ export default function App() {
     };
 
     const handleQueueCancelled = () => {
+      if (aiQueueTimeoutRef.current !== null) {
+        window.clearTimeout(aiQueueTimeoutRef.current);
+        aiQueueTimeoutRef.current = null;
+      }
       if (viewRef.current !== "matchmaking") return;
       resetMatchmakingStateRef.current();
       setView("menu");
@@ -903,6 +929,10 @@ export default function App() {
 
     const handleMatchFound = ({ roomId, opponent }: MatchFoundPayload) => {
       console.log("[match:found] received", roomId, opponent.nickname);
+      if (aiQueueTimeoutRef.current !== null) {
+        window.clearTimeout(aiQueueTimeoutRef.current);
+        aiQueueTimeoutRef.current = null;
+      }
       setAiMatchDeployed(false);
       setMatchmakingStatus(t("matchFound"));
       setMatchmakingDetail(`${opponent.nickname} linked. Synchronizing arena...`);
@@ -915,6 +945,10 @@ export default function App() {
 
     const handleAiFallback = ({ roomId, opponent }: MatchAiFallbackPayload) => {
       console.log("[match:ai_fallback] received", roomId, opponent.nickname);
+      if (aiQueueTimeoutRef.current !== null) {
+        window.clearTimeout(aiQueueTimeoutRef.current);
+        aiQueueTimeoutRef.current = null;
+      }
       setAiMatchDeployed(true);
       setMatchmakingStatus(t("aiMatch"));
       setMatchmakingDetail(`${opponent.nickname} deployed.`);
