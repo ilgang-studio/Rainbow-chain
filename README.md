@@ -78,7 +78,7 @@ export default defineConfig([
 Create a local env file before running the frontend:
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 Set the socket server URL with `VITE_SOCKET_URL`.
