@@ -10,8 +10,14 @@ import type {
   RoomStartPayload,
 } from "./network/events";
 import { prepareSocketAuth, socket } from "./network/socket";
-import { DEFAULT_SETTINGS, type AppSettings } from "./settings";
+import type { AppSettings } from "./settings";
 import { setLocale, t } from "./i18n";
+import {
+  useAppStore,
+  type ControlKey,
+  type MenuMode,
+  type ViewState,
+} from "./store/appStore";
 import battleTrackA from "./assets/Nervous Footsteps.mp3";
 import battleTrackB from "./assets/Submerged Split.mp3";
 import battleTrackC from "./assets/Tilted Piano Room.mp3";
@@ -25,14 +31,7 @@ const MENU_ITEMS = [
   { id: "settings", label: "SETTINGS" },
 ] as const;
 
-type MenuMode = "casual" | "practice" | "double";
 type QueueMode = "casual";
-type ViewState = "menu" | "settings" | "help" | "matchmaking";
-type ControlKey = keyof AppSettings["controls"];
-
-const SETTINGS_STORAGE_KEY = "rainbow-chain-settings";
-const GUEST_NICKNAME_STORAGE_KEY = "guestNickname";
-const GUEST_ID_STORAGE_KEY = "guestId";
 const BATTLE_TRACKS = [battleTrackA, battleTrackB, battleTrackC];
 const TRANSITION_FADE_MS = 320;
 const TRANSITION_HOLD_MS = 200;
@@ -49,68 +48,6 @@ function createMenuDust(count: number) {
     drift: -22 + Math.random() * 44,
     opacity: 0.18 + Math.random() * 0.28,
   }));
-}
-
-function readStoredSettings(): AppSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
-  const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-  if (!raw) return DEFAULT_SETTINGS;
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      controls: {
-        ...DEFAULT_SETTINGS.controls,
-        ...parsed.controls,
-      },
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-function sanitizeNickname(value: string): string {
-  return value.trim().slice(0, 8);
-}
-
-function generateGuestNickname(): string {
-  return `Guest_${Math.floor(10 + Math.random() * 90)}`;
-}
-
-function readStoredGuestNickname(): string {
-  if (typeof window === "undefined") return "";
-  const raw = window.localStorage.getItem(GUEST_NICKNAME_STORAGE_KEY);
-  return raw ? sanitizeNickname(raw) : "";
-}
-
-function generateGuestId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `guest_${crypto.randomUUID()}`;
-  }
-  return `guest_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-}
-
-function readStoredGuestId(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(GUEST_ID_STORAGE_KEY) ?? "";
-}
-
-function saveGuestId(value: string): string {
-  const nextGuestId = value.trim() || generateGuestId();
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(GUEST_ID_STORAGE_KEY, nextGuestId);
-  }
-  return nextGuestId;
-}
-
-function saveGuestNickname(value: string): string {
-  const nextNickname = sanitizeNickname(value) || generateGuestNickname();
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(GUEST_NICKNAME_STORAGE_KEY, nextNickname);
-  }
-  return nextNickname;
 }
 
 function formatKeyLabel(key: string): string {
@@ -584,26 +521,40 @@ function SettingsView({
 }
 
 export default function App() {
-  const storedGuestNickname = readStoredGuestNickname();
-  const storedGuestId = readStoredGuestId();
-  const [settings, setSettings] = useState<AppSettings>(() => readStoredSettings());
+  const settings = useAppStore((state) => state.settings);
+  const setSettings = useAppStore((state) => state.setSettings);
   // 언어 변경 시 즉시 locale 동기화 (렌더 전에 실행되므로 t() 호출이 항상 현재 언어 반영)
   setLocale(settings.language);
-  const [selectedMode, setSelectedMode] = useState<MenuMode | null>(null);
-  const [view, setView] = useState<ViewState>("menu");
-  const [queueSeconds, setQueueSeconds] = useState(0);
-  const [aiMatchDeployed, setAiMatchDeployed] = useState(false);
-  const [matchmakingStatus, setMatchmakingStatus] = useState("MATCHMAKING");
-  const [matchmakingDetail, setMatchmakingDetail] = useState("Searching for opponent...");
-  const [activeRoomStart, setActiveRoomStart] = useState<RoomStartPayload | null>(null);
-  const [listeningKey, setListeningKey] = useState<ControlKey | null>(null);
-  const [guestId, setGuestId] = useState(storedGuestId);
-  const [guestNickname, setGuestNickname] = useState(storedGuestNickname);
-  const [nicknameInput, setNicknameInput] = useState(storedGuestNickname);
-  const [hasEnteredNickname, setHasEnteredNickname] = useState(storedGuestNickname.length > 0);
-  const [transitionActive, setTransitionActive] = useState(false);
-  const [transitionLabel, setTransitionLabel] = useState("LOADING");
-  const [battleTrackIndex, setBattleTrackIndex] = useState(0);
+  const selectedMode = useAppStore((state) => state.selectedMode);
+  const setSelectedMode = useAppStore((state) => state.setSelectedMode);
+  const view = useAppStore((state) => state.view);
+  const setView = useAppStore((state) => state.setView);
+  const queueSeconds = useAppStore((state) => state.queueSeconds);
+  const setQueueSeconds = useAppStore((state) => state.setQueueSeconds);
+  const aiMatchDeployed = useAppStore((state) => state.aiMatchDeployed);
+  const setAiMatchDeployed = useAppStore((state) => state.setAiMatchDeployed);
+  const matchmakingStatus = useAppStore((state) => state.matchmakingStatus);
+  const setMatchmakingStatus = useAppStore((state) => state.setMatchmakingStatus);
+  const matchmakingDetail = useAppStore((state) => state.matchmakingDetail);
+  const setMatchmakingDetail = useAppStore((state) => state.setMatchmakingDetail);
+  const activeRoomStart = useAppStore((state) => state.activeRoomStart);
+  const setActiveRoomStart = useAppStore((state) => state.setActiveRoomStart);
+  const listeningKey = useAppStore((state) => state.listeningKey);
+  const setListeningKey = useAppStore((state) => state.setListeningKey);
+  const guestId = useAppStore((state) => state.guestId);
+  const guestNickname = useAppStore((state) => state.guestNickname);
+  const nicknameInput = useAppStore((state) => state.nicknameInput);
+  const setNicknameInput = useAppStore((state) => state.setNicknameInput);
+  const hasEnteredNickname = useAppStore((state) => state.hasEnteredNickname);
+  const transitionActive = useAppStore((state) => state.transitionActive);
+  const setTransitionActive = useAppStore((state) => state.setTransitionActive);
+  const transitionLabel = useAppStore((state) => state.transitionLabel);
+  const setTransitionLabel = useAppStore((state) => state.setTransitionLabel);
+  const battleTrackIndex = useAppStore((state) => state.battleTrackIndex);
+  const setBattleTrackIndex = useAppStore((state) => state.setBattleTrackIndex);
+  const ensureGuestIdentity = useAppStore((state) => state.ensureGuestIdentity);
+  const updateGuestNickname = useAppStore((state) => state.updateGuestNickname);
+  const confirmGuestNickname = useAppStore((state) => state.confirmGuestNickname);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioKindRef = useRef<"menu" | "battle" | null>(null);
   const audioTrackRef = useRef<string | null>(null);
@@ -648,33 +599,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
     viewRef.current = view;
   }, [view]);
 
   useEffect(() => {
     selectedModeRef.current = selectedMode;
   }, [selectedMode]);
-
-  const confirmGuestNickname = () => {
-    const nextNickname = saveGuestNickname(nicknameInput);
-    setGuestNickname(nextNickname);
-    setNicknameInput(nextNickname);
-    setHasEnteredNickname(true);
-  };
-
-  const updateGuestNickname = (value: string) => {
-    const nextInput = value.slice(0, 8);
-    setGuestNickname(nextInput);
-    setNicknameInput(nextInput);
-    const nextNickname = saveGuestNickname(nextInput);
-    setGuestNickname(nextNickname);
-    setNicknameInput(nextNickname);
-    setHasEnteredNickname(true);
-  };
 
   useEffect(() => {
     if (listeningKey === null) return;
@@ -820,21 +750,6 @@ export default function App() {
     setAiMatchDeployed(false);
     setMatchmakingStatus(t("matchmaking"));
     setMatchmakingDetail(t("searchingOpponent"));
-  };
-
-  const ensureGuestIdentity = () => {
-    const nextGuestId = guestId || saveGuestId("");
-    const nextGuestNickname = guestNickname || saveGuestNickname(nicknameInput || guestNickname);
-
-    setGuestId(nextGuestId);
-    setGuestNickname(nextGuestNickname);
-    setNicknameInput(nextGuestNickname);
-    setHasEnteredNickname(true);
-
-    return {
-      guestId: nextGuestId,
-      nickname: nextGuestNickname,
-    };
   };
 
   const runScreenTransition = (label: string, applyChange: () => void) => {
@@ -1095,7 +1010,7 @@ export default function App() {
       />
     ) : view === "matchmaking" ? (
       <MatchmakingView
-        nickname={guestNickname || generateGuestNickname()}
+        nickname={guestNickname || "Guest_00"}
         particleCount={particleCount}
         elapsedSeconds={queueSeconds}
         statusLabel={matchmakingStatus}
