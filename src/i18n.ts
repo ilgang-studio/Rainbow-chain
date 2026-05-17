@@ -15,101 +15,197 @@ function getInitialLocale(): Language {
 }
 
 const translations = {
+
   en: {
-    casual: "casual",
-    double: "double",
-    practice: "practice",
-    settings: "settings",
-    help: "help",
+
+    casual: "CASUAL",
+
+    double: "LOCAL VS",
+
+    practice: "PRACTICE",
+
+    settings: "SETTINGS",
+
+    help: "HELP",
+
     loading: "LOADING",
+
     matchmaking: "MATCHMAKING",
+
     deployingAi: "DEPLOYING AI OPPONENT",
-    searching: "SEARCHING",
+
+    searching: "SEARCHING...",
+
     casualMatchmaking: "CASUAL MATCHMAKING",
+
     matchFound: "MATCH FOUND",
+
     aiMatch: "AI MATCH",
+
     searchingOpponent: "Searching for opponent...",
+
     connectingToServer: "Connecting to matchmaking server...",
-    cancel: "cancel",
-    restart: "Restart",
-    main: "Main",
-    mainMenu: "Main Menu",
+
+    cancel: "CANCEL",
+
+    restart: "REMATCH",
+
+    main: "MAIN MENU",
+
+    mainMenu: "MAIN MENU",
+
     round: "ROUND",
+
     roundResult: "ROUND RESULT",
+
     finalScore: "FINAL SCORE",
+
     youShort: "YOU",
+
     opponentShort: "OPP",
+
     victory: "VICTORY",
+
     defeat: "DEFEAT",
+
     preparingNextRound: "Preparing next round...",
-    nextRoundIn: "Next round in %{count}",
+
+    nextRoundIn: "Starting in %{count}",
+
     rematch: "REMATCH",
+
     waitingForOpponent: "Waiting for opponent...",
-    opponentLeft: "Opponent left. Searching new match...",
+
+    opponentLeft: "Opponent disconnected.",
+
     opponentAwayCountdown: "Opponent disconnected. %{count}s remaining...",
-    searchingNewMatch: "Searching new match...",
+
+    searchingNewMatch: "Searching for a new match...",
+
     settingsTitle: "Settings",
+
     helpTitle: "Help",
+
     helpPageBasics: "Page 1 · Basics",
+
     helpPageChainsA: "Page 2 · Chains I",
+
     helpPageChainsB: "Page 3 · Chains II",
+
     helpPageItemsModes: "Page 4 · Items & Modes",
+
     helpPrev: "Previous",
+
     helpNext: "Next",
+
     helpObjectiveTitle: "Objective",
-    helpObjectiveBody: "Outlast the arena, dodge chains, and force the other player into a hit.",
+
+    helpObjectiveBody: "Survive the chains and force your opponent into danger first.",
+
     helpControlsTitle: "Controls",
-    helpControlsBody: "Move with your configured keys. Use your chain key after grabbing an item.",
+
+    helpControlsBody: "Move with your configured keys. After picking up an item, use your chain key to trigger it.",
+
     helpHazardsTitle: "Arena Rules",
-    helpHazardsBody: "Every chain shows a warning first, then becomes lethal. The longer the round lasts, the more pressure the arena creates.",
+
+    helpHazardsBody: "Every chain shows a warning before its hitbox becomes active. The arena pressure increases as the round continues.",
+
     helpChainsTitle: "Chain Types",
+
     helpChainNormalTitle: "Normal",
-    helpChainNormalBody: "A standard straight chain that cuts across the enemy arena.",
+
+    helpChainNormalBody: "A basic straight chain that cuts across the opponent arena.",
+
     helpChainRushTitle: "Rush",
-    helpChainRushBody: "A fast red chain with short warning time and a sudden strike.",
+
+    helpChainRushBody: "A high-speed chain with a very short warning window.",
+
     helpChainTurnTitle: "Turn",
-    helpChainTurnBody: "An L-shaped chain that bends once, catching players who dodge only the first line.",
+
+    helpChainTurnBody: "An L-shaped chain that bends once. Dodging the first line may still lead into the second.",
+
     helpChainFakeTitle: "Fake",
-    helpChainFakeBody: "A deceptive purple warning that shows a false position before the real line arrives.",
+
+    helpChainFakeBody: "A deceptive chain that shows a false warning before the real attack follows.",
+
     helpChainGiantTitle: "Giant",
-    helpChainGiantBody: "A huge blue chain with a much wider hit zone that blocks more space.",
+
+    helpChainGiantBody: "A massive chain that blocks a much wider area.",
+
     helpChainTrackingTitle: "Tracking",
-    helpChainTrackingBody: "A green chain that curves toward the target after it starts moving.",
+
+    helpChainTrackingBody: "A tracking chain that bends toward the target after launch.",
+
     helpChainPhaseTitle: "Phase",
-    helpChainPhaseBody: "An orange chain that briefly disappears, then returns on the same line.",
+
+    helpChainPhaseBody: "A phase chain that disappears briefly, then returns on the same line.",
+
     helpItemsTitle: "Items",
-    helpItemsBody: "Picking up an item stores one random chain. When used, it creates a random chain at a random position in the enemy arena.",
-    helpPracticeTitle: "Practice",
-    helpPracticeBody: "Practice starts softer so you can learn spacing before the arena becomes aggressive.",
+
+    helpItemsBody: "Picking up an item stores one random chain. Using it creates a chain at a random position in the opponent arena.",
+
+    helpPracticeTitle: "Practice Mode",
+
+    helpPracticeBody: "Practice starts with lower pressure so you can learn spacing and dodge timing.",
+
     helpModesTitle: "Modes",
-    helpModesBody: "Casual uses online matchmaking, Double is local versus, and Practice is solo survival.",
-    back: "back",
+
+    helpModesBody: "Casual is online matchmaking, Local VS is two players on one device, and Practice is solo survival.",
+
+    back: "BACK",
+
     nicknameSetting: "Nickname",
+
     guestName: "Guest Name",
+
     languageSetting: "Language",
+
     keySettings: "Key Settings",
+
     pressKey: "press key...",
+
     sound: "Sound",
+
     glowParticle: "Glow / Particle",
+
     glow: "Glow",
+
     particle: "Particle",
-    enterNickname: "Please write your nickname.",
-    start: "start",
+
+    enterNickname: "Please enter your nickname.",
+
+    start: "START",
+
     encounterLabel: "ENCOUNTER",
+
     encounter: {
+
       chainStorm: {
+
         name: "Chain Storm",
-        description: "Chains are produced faster across the arena.",
+
+        description: "Chain generation speed increases across the arena.",
+
       },
+
       itemFever: {
+
         name: "Item Fever",
-        description: "Items spawn more often for nonstop pickups.",
+
+        description: "Items spawn much more frequently.",
+
       },
+
       overclock: {
+
         name: "Overclock",
-        description: "Chains launch faster once the warning ends.",
+
+        description: "Chains launch faster after their warning ends.",
+
       },
+
     },
+
   },
   ko: {
     casual: "캐주얼",
@@ -156,6 +252,9 @@ const translations = {
     waitingForOpponent: "상대방을 기다리는 중...",
 
     opponentLeft: "상대방이 연결을 종료했습니다.",
+
+    opponentAwayCountdown: "상대방이 연결을 잃었습니다. %{count}초 남음...",
+
     searchingNewMatch: "새로운 매치를 찾는 중...",
 
     settingsTitle: "설정",
@@ -266,197 +365,388 @@ const translations = {
     },
   },
   ja: {
+
     casual: "カジュアル",
-    double: "ダブル",
+
+    double: "ローカル対戦",
+
     practice: "練習",
+
     settings: "設定",
+
     help: "ヘルプ",
-    loading: "ロード中",
+
+    loading: "LOADING",
+
     matchmaking: "マッチング中",
-    deployingAi: "AI配備中",
-    searching: "検索中",
+
+    deployingAi: "AI相手を配備中",
+
+    searching: "検索中...",
+
     casualMatchmaking: "カジュアルマッチング",
-    matchFound: "マッチ成立",
-    aiMatch: "AIマッチ",
+
+    matchFound: "MATCH FOUND",
+
+    aiMatch: "AI MATCH",
+
     searchingOpponent: "対戦相手を探しています...",
+
     connectingToServer: "マッチングサーバーに接続中...",
+
     cancel: "キャンセル",
-    restart: "リスタート",
-    main: "メイン",
+
+    restart: "リマッチ",
+
+    main: "メインメニュー",
+
     mainMenu: "メインメニュー",
-    round: "ラウンド",
-    roundResult: "ラウンド結果",
-    finalScore: "最終スコア",
+
+    round: "ROUND",
+
+    roundResult: "ROUND RESULT",
+
+    finalScore: "FINAL SCORE",
+
     youShort: "YOU",
+
     opponentShort: "OPP",
-    victory: "勝利",
-    defeat: "敗北",
+
+    victory: "VICTORY",
+
+    defeat: "DEFEAT",
+
     preparingNextRound: "次のラウンドを準備中...",
-    nextRoundIn: "%{count}秒後に次のラウンド",
-    rematch: "リマッチ",
+
+    nextRoundIn: "%{count}秒後に開始",
+
+    rematch: "REMATCH",
+
     waitingForOpponent: "対戦相手を待っています...",
-    opponentLeft: "相手が退出しました。新しいマッチを探しています...",
+
+    opponentLeft: "相手が切断しました。",
+
     opponentAwayCountdown: "相手の接続が切れました。残り %{count} 秒...",
+
     searchingNewMatch: "新しいマッチを探しています...",
+
     settingsTitle: "設定",
+
     helpTitle: "ヘルプ",
+
     helpPageBasics: "1章 · 基本",
+
     helpPageChainsA: "2章 · チェーン I",
+
     helpPageChainsB: "3章 · チェーン II",
-    helpPageItemsModes: "4章 · アイテムとモード",
-    helpPrev: "Prev",
-    helpNext: "Next",
+
+    helpPageItemsModes: "4章 · アイテム & モード",
+
+    helpPrev: "前へ",
+
+    helpNext: "次へ",
+
     helpObjectiveTitle: "目的",
-    helpObjectiveBody: "チェーンを避けながら生き残り、相手を先に被弾させます。",
+
+    helpObjectiveBody: "チェーンを避けながら生き残り、相手を先に危険地帯へ追い込みます。",
+
     helpControlsTitle: "操作",
-    helpControlsBody: "設定した移動キーで動き、アイテム取得後に使用キーでチェーンを発射します。",
+
+    helpControlsBody: "設定した移動キーで動き、アイテム取得後に使用キーでチェーンを発動します。",
+
     helpHazardsTitle: "アリーナルール",
-    helpHazardsBody: "すべてのチェーンは先に警告を出してから致命判定になります。時間が経つほどアリーナの圧も上がります。",
+
+    helpHazardsBody: "すべてのチェーンは先に警告を表示し、その後に攻撃判定が有効になります。時間が経つほどアリーナの圧力は高まります。",
+
     helpChainsTitle: "チェーン種類",
+
     helpChainNormalTitle: "ノーマル",
-    helpChainNormalBody: "基本の直線チェーンです。相手アリーナをまっすぐ横切ります。",
+
+    helpChainNormalBody: "相手アリーナをまっすぐ横切る基本の直線チェーンです。",
+
     helpChainRushTitle: "ラッシュ",
-    helpChainRushBody: "赤い高速チェーンです。警告が短く、一気に飛び込みます。",
+
+    helpChainRushBody: "警告時間が非常に短い高速突進チェーンです。",
+
     helpChainTurnTitle: "ターン",
-    helpChainTurnBody: "一度曲がる L 字チェーンです。最初の線だけ避けると二本目に当たります。",
+
+    helpChainTurnBody: "一度だけ曲がるL字型チェーンです。最初のラインを避けても、次のラインに当たることがあります。",
+
     helpChainFakeTitle: "フェイク",
-    helpChainFakeBody: "紫の攪乱チェーンです。先に偽の位置を見せてから本命が来ます。",
+
+    helpChainFakeBody: "偽の警告位置を見せた後、本命の攻撃が続く撹乱型チェーンです。",
+
     helpChainGiantTitle: "ジャイアント",
-    helpChainGiantBody: "青い大型チェーンです。判定幅が広く、広い範囲を塞ぎます。",
+
+    helpChainGiantBody: "広い範囲を塞ぐ巨大チェーンです。",
+
     helpChainTrackingTitle: "トラッキング",
-    helpChainTrackingBody: "緑の追尾チェーンです。発動後に相手方向へ曲がります。",
+
+    helpChainTrackingBody: "発動後、目標方向へ曲がっていく追跡型チェーンです。",
+
     helpChainPhaseTitle: "フェーズ",
-    helpChainPhaseBody: "オレンジのチェーンです。少し消えてから同じラインに戻ります。",
-    helpItemsTitle: "アイテム効果",
-    helpItemsBody: "アイテムを取るとランダムなチェーンを 1 回分保持します。使うと相手アリーナのランダム位置にランダムなチェーンが生成されます。",
+
+    helpChainPhaseBody: "一瞬消えた後、同じラインに再び現れる位相チェーンです。",
+
+    helpItemsTitle: "アイテム",
+
+    helpItemsBody: "アイテムを取るとランダムなチェーンを1つ保持します。使用すると相手アリーナのランダム位置にチェーンが生成されます。",
+
     helpPracticeTitle: "練習モード",
-    helpPracticeBody: "練習モードは序盤の密度を抑えて、回避と間合いを覚えやすくしています。",
+
+    helpPracticeBody: "序盤の圧力が低く、間合いと回避タイミングを覚えやすいモードです。",
+
     helpModesTitle: "モード",
-    helpModesBody: "Casual はオンライン対戦、Double はローカル対戦、Practice はソロ生存です。",
+
+    helpModesBody: "カジュアルはオンラインマッチング、ローカル対戦は同じ端末での2人対戦、練習はソロ生存モードです。",
+
     back: "戻る",
+
     nicknameSetting: "ニックネーム",
+
     guestName: "ゲスト名",
+
     languageSetting: "言語",
+
     keySettings: "キー設定",
+
     pressKey: "キーを押してください...",
+
     sound: "サウンド",
+
     glowParticle: "グロー / パーティクル",
+
     glow: "グロー",
+
     particle: "パーティクル",
+
     enterNickname: "ニックネームを入力してください。",
+
     start: "スタート",
-    encounterLabel: "エンカウント",
+
+    encounterLabel: "ENCOUNTER",
+
     encounter: {
+
       chainStorm: {
+
         name: "チェーンストーム",
-        description: "アリーナ全体でチェーンの生成が速くなります。",
+
+        description: "アリーナ全体でチェーン生成速度が上がります。",
+
       },
+
       itemFever: {
+
         name: "アイテムフィーバー",
-        description: "アイテムの出現頻度が上がり、連続で回収できます。",
+
+        description: "アイテムの出現頻度が大きく上がります。",
+
       },
+
       overclock: {
+
         name: "オーバークロック",
+
         description: "警告終了後、チェーンの発射速度が上がります。",
+
       },
+
     },
+
   },
   "zh-CN": {
+
     casual: "休闲",
-    double: "双人",
+
+    double: "本地对战",
+
     practice: "练习",
+
     settings: "设置",
+
     help: "帮助",
-    loading: "加载中",
+
+    loading: "LOADING",
+
     matchmaking: "匹配中",
-    deployingAi: "部署AI对手中",
-    searching: "搜索中",
+
+    deployingAi: "AI对手部署中",
+
+    searching: "搜索中...",
+
     casualMatchmaking: "休闲匹配",
-    matchFound: "找到对手",
-    aiMatch: "AI对战",
-    searchingOpponent: "正在搜索对手...",
-    connectingToServer: "连接匹配服务器中...",
+
+    matchFound: "MATCH FOUND",
+
+    aiMatch: "AI MATCH",
+
+    searchingOpponent: "寻找对手中...",
+
+    connectingToServer: "正在连接匹配服务器...",
+
     cancel: "取消",
-    restart: "重新开始",
-    main: "主界面",
+
+    restart: "再战",
+
+    main: "主菜单",
+
     mainMenu: "主菜单",
-    round: "回合",
-    roundResult: "回合结果",
-    finalScore: "最终比分",
-    youShort: "我方",
-    opponentShort: "对手",
-    victory: "胜利",
-    defeat: "失败",
+
+    round: "ROUND",
+
+    roundResult: "ROUND RESULT",
+
+    finalScore: "FINAL SCORE",
+
+    youShort: "YOU",
+
+    opponentShort: "OPP",
+
+    victory: "VICTORY",
+
+    defeat: "DEFEAT",
+
     preparingNextRound: "正在准备下一回合...",
-    nextRoundIn: "%{count}秒后进入下一回合",
-    rematch: "再来一局",
+
+    nextRoundIn: "%{count}秒后开始",
+
+    rematch: "REMATCH",
+
     waitingForOpponent: "等待对手中...",
-    opponentLeft: "对手已离开。正在搜索新对手...",
+
+    opponentLeft: "对手已断开连接。",
+
     opponentAwayCountdown: "对手已断开连接。剩余 %{count} 秒...",
-    searchingNewMatch: "正在搜索新对手...",
+
+    searchingNewMatch: "正在寻找新对手...",
+
     settingsTitle: "设置",
+
     helpTitle: "帮助",
+
     helpPageBasics: "第1页 · 基础",
+
     helpPageChainsA: "第2页 · 锁链 I",
+
     helpPageChainsB: "第3页 · 锁链 II",
-    helpPageItemsModes: "第4页 · 道具与模式",
+
+    helpPageItemsModes: "第4页 · 道具 & 模式",
+
     helpPrev: "上一页",
+
     helpNext: "下一页",
+
     helpObjectiveTitle: "目标",
-    helpObjectiveBody: "躲开锁链并尽量生存，让对手先被击中。",
+
+    helpObjectiveBody: "躲避锁链并生存下来，率先把对手逼入危险区域。",
+
     helpControlsTitle: "操作",
-    helpControlsBody: "使用你设置的移动按键移动，拾取道具后用使用键发射锁链。",
+
+    helpControlsBody: "使用设置好的移动键移动，拾取道具后用使用键触发锁链。",
+
     helpHazardsTitle: "竞技场规则",
-    helpHazardsBody: "所有锁链都会先显示警告，再进入真正的危险阶段。时间越久，竞技场压迫会越强。",
+
+    helpHazardsBody: "所有锁链都会先显示警告，然后才会激活攻击判定。回合持续越久，竞技场压力越高。",
+
     helpChainsTitle: "锁链类型",
+
     helpChainNormalTitle: "普通",
+
     helpChainNormalBody: "最基础的直线锁链，会直接横穿对手区域。",
+
     helpChainRushTitle: "突进",
-    helpChainRushBody: "红色高速锁链，预警更短，攻击更突然。",
+
+    helpChainRushBody: "警告时间极短的高速突进锁链。",
+
     helpChainTurnTitle: "转折",
-    helpChainTurnBody: "会拐一次弯的 L 形锁链，只躲第一段也可能吃到第二段。",
+
+    helpChainTurnBody: "会拐一次弯的L形锁链。躲过第一条线，也可能撞上第二条线。",
+
     helpChainFakeTitle: "假象",
-    helpChainFakeBody: "紫色干扰锁链，会先显示假位置，再出现真正路线。",
+
+    helpChainFakeBody: "先显示假警告位置，再出现真正攻击的干扰型锁链。",
+
     helpChainGiantTitle: "巨型",
-    helpChainGiantBody: "蓝色大范围锁链，判定更宽，封路能力很强。",
+
+    helpChainGiantBody: "能够封锁大范围空间的巨型锁链。",
+
     helpChainTrackingTitle: "追踪",
-    helpChainTrackingBody: "绿色追踪锁链，发动后会朝目标方向弯过去。",
+
+    helpChainTrackingBody: "发动后会朝目标方向弯曲的追踪型锁链。",
+
     helpChainPhaseTitle: "相位",
-    helpChainPhaseBody: "橙色锁链，会短暂消失后沿同一路线再次出现。",
-    helpItemsTitle: "道具效果",
-    helpItemsBody: "拾取道具后会储存 1 次随机锁链。使用时会在对手区域的随机位置生成随机锁链。",
+
+    helpChainPhaseBody: "短暂消失后，会在同一路线再次出现的相位锁链。",
+
+    helpItemsTitle: "道具",
+
+    helpItemsBody: "拾取道具后会储存1条随机锁链。使用时会在对手区域的随机位置生成锁链。",
+
     helpPracticeTitle: "练习模式",
-    helpPracticeBody: "练习模式开局更温和，方便先熟悉走位和闪避节奏。",
+
+    helpPracticeBody: "开局压力较低，适合练习距离感和闪避时机。",
+
     helpModesTitle: "模式",
-    helpModesBody: "休闲是在线匹配，双人是本地对战，练习是单人生存。",
+
+    helpModesBody: "休闲为在线匹配，本地对战为同设备双人对战，练习为单人生存模式。",
+
     back: "返回",
+
     nicknameSetting: "昵称",
+
     guestName: "访客名称",
+
     languageSetting: "语言",
+
     keySettings: "按键设置",
+
     pressKey: "请按键...",
+
     sound: "音效",
+
     glowParticle: "光效 / 粒子",
+
     glow: "光效",
+
     particle: "粒子",
-    enterNickname: "请输入您的昵称。",
+
+    enterNickname: "请输入昵称。",
+
     start: "开始",
-    encounterLabel: "遭遇事件",
+
+    encounterLabel: "ENCOUNTER",
+
     encounter: {
+
       chainStorm: {
+
         name: "锁链风暴",
-        description: "整个竞技场中的锁链生成速度会更快。",
+
+        description: "整个竞技场的锁链生成速度提高。",
+
       },
+
       itemFever: {
+
         name: "道具狂热",
-        description: "道具会更频繁出现，能够连续拾取。",
+
+        description: "道具生成频率大幅提高。",
+
       },
+
       overclock: {
+
         name: "超频",
-        description: "警告结束后，锁链发射速度会更快。",
+
+        description: "警告结束后，锁链发射速度提高。",
+
       },
+
     },
+
   },
+
 };
 
 export const i18n = new I18n(translations);
