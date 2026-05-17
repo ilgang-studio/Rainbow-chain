@@ -72,8 +72,14 @@ function buildZone(
   const turnDir = seed.turnDir;
   const turnRatio = seed.turnRatio;
   const isVert = orientation === "vertical";
-  const centerPos = seed.centerPos;
-  const fakePos = seed.fakePos ?? centerPos;
+  let centerPos = seed.centerPos;
+  let fakePos = seed.fakePos ?? centerPos;
+
+  if (chainType === "fake" && seed.fakePos == null) {
+    const axisCenter = isVert ? arena.x + arena.w / 2 : arena.y + arena.h / 2;
+    fakePos = centerPos;
+    centerPos = 2 * axisCenter - centerPos;
+  }
 
   const fullLen = isVert ? arena.h : arena.w;
   const base = isVert ? arena.y : arena.x;

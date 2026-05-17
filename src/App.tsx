@@ -9,7 +9,7 @@ import type {
 
   RoomStartPayload,
 } from "./network/events";
-import { socket } from "./network/socket";
+import { prepareSocketAuth, socket } from "./network/socket";
 import { DEFAULT_SETTINGS, type AppSettings } from "./settings";
 import { setLocale, t } from "./i18n";
 import battleTrackA from "./assets/Nervous Footsteps.mp3";
@@ -856,7 +856,7 @@ export default function App() {
     }, TRANSITION_TOTAL_MS));
   };
 
-  const emitQueueJoin = (payload: QueueJoinPayload) => {
+  const emitQueueJoin = async (payload: QueueJoinPayload) => {
     pendingQueueJoinRef.current = payload;
     setMatchmakingDetail(t("connectingToServer"));
 
@@ -866,7 +866,16 @@ export default function App() {
       return;
     }
 
-    socket.connect();
+    try {
+      await prepareSocketAuth(payload.guestId, payload.nickname);
+      socket.connect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Socket authentication failed.";
+      console.error("[socket:auth_error]", message);
+      pendingQueueJoinRef.current = null;
+      setMatchmakingStatus("QUEUE ERROR");
+      setMatchmakingDetail(message);
+    }
   };
 
   const beginMatchmaking = (mode: QueueMode) => {
@@ -881,7 +890,7 @@ export default function App() {
 
     runScreenTransition(t("matchmaking"), () => {
       setView("matchmaking");
-      emitQueueJoin(payload);
+      void emitQueueJoin(payload);
     });
   };
 
@@ -899,7 +908,7 @@ export default function App() {
       setActiveRoomStart(null);
       setSelectedMode(null);
       setView("matchmaking");
-      emitQueueJoin(payload);
+      void emitQueueJoin(payload);
     });
   };
 
