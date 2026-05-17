@@ -933,6 +933,21 @@ export default function App() {
       pendingQueueJoinRef.current = null;
     };
 
+    const handleConnectError = (error: Error) => {
+      console.error("[socket:connect_error]", error.message);
+      if (viewRef.current !== "matchmaking") return;
+      setMatchmakingStatus("QUEUE ERROR");
+      setMatchmakingDetail(error.message || t("connectingToServer"));
+    };
+
+    const handleDisconnect = (reason: string) => {
+      console.warn("[socket:disconnect]", reason);
+      if (viewRef.current !== "matchmaking") return;
+      if (pendingQueueJoinRef.current == null) return;
+      setMatchmakingStatus("QUEUE ERROR");
+      setMatchmakingDetail(reason);
+    };
+
     const handleQueueJoined = () => {
       setQueueSeconds(0);
       setAiMatchDeployed(false);
@@ -1007,6 +1022,8 @@ export default function App() {
     };
 
     socket.on("connect", handleConnect);
+    socket.on("connect_error", handleConnectError);
+    socket.on("disconnect", handleDisconnect);
     socket.on("queue:joined", handleQueueJoined);
     socket.on("queue:tick", handleQueueTick);
     socket.on("queue:cancelled", handleQueueCancelled);
@@ -1019,6 +1036,8 @@ export default function App() {
     return () => {
       clearRoomReadyTimer();
       socket.off("connect", handleConnect);
+      socket.off("connect_error", handleConnectError);
+      socket.off("disconnect", handleDisconnect);
       socket.off("queue:joined", handleQueueJoined);
       socket.off("queue:tick", handleQueueTick);
       socket.off("queue:cancelled", handleQueueCancelled);
