@@ -97,6 +97,7 @@ export default function GameCanvas({
   const matchTimersRef = useRef<number[]>([]);
   const pendingMatchResetRef = useRef(false);
   const awaySentRef = useRef(false);
+  const onlinePauseRef = useRef(false);
   const roundNumberRef = useRef(1);
   const roundWinsRef = useRef<[number, number]>([0, 0]);
   const mountedRef = useRef(true);
@@ -125,6 +126,10 @@ export default function GameCanvas({
   useEffect(() => {
     roundWinsRef.current = roundWins;
   }, [roundWins]);
+
+  useEffect(() => {
+    onlinePauseRef.current = opponentAwaySeconds != null;
+  }, [opponentAwaySeconds]);
 
   const isOnline = mode === "casual" && roomStart != null && guestId != null;
   const opponentPlayer = isOnline
@@ -495,6 +500,7 @@ export default function GameCanvas({
       practiceMode: mode === "practice",
       onChainLaunch: playChainSfx,
       onRestartRequest: restartGame,
+      isPaused: () => onlinePauseRef.current,
       online: onlineOptions,
       battleConfig,
       encounterTheme: roundTheme.encounter,

@@ -45,6 +45,7 @@ export function startGameLoop(
     practiceMode?: boolean;
     onChainLaunch?: () => void;
     onRestartRequest?: () => void;
+    isPaused?: () => boolean;
     online?: OnlineGameOptions;
     battleConfig?: BattleConfig;
     encounterTheme?: EncounterConfig | null;
@@ -526,7 +527,7 @@ export function startGameLoop(
   }
 
   const onKey = (e: KeyboardEvent) => {
-    if (isGameOver) return;
+    if (isGameOver || options?.isPaused?.()) return;
 
     if (useServerBattle && online) {
       const localPlayer = players[online.localIdx];
@@ -557,6 +558,7 @@ export function startGameLoop(
     const raw = (now - lastTime) / 1000;
     const dt  = Math.min(raw, MAX_DT);
     lastTime  = now;
+    const isPaused = options?.isPaused?.() ?? false;
 
     // FPS: 1초마다 갱신
     fpsFrames++;
@@ -574,28 +576,30 @@ export function startGameLoop(
     // ── 아레나 테두리 ────────────────────────
     for (let i = 0; i < arenaCount; i++) drawArena(ctx, arenas[i]);
 
-    gameTime += dt;
-    if (currentEncounter) {
-      encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
+    if (!isPaused) {
+      gameTime += dt;
+      if (currentEncounter) {
+        encounterIntroTimer = Math.max(0, encounterIntroTimer - dt);
+      }
+
+      if (!useServerBattle) {
+        updateItemsWithRate(
+          items,
+          dt,
+          arenas,
+          currentEncounter?.modifiers.itemRespawnRateMultiplier ?? 1,
+        );
+      }
+
+      if (!useServerBattle || useDeterministicEncounterChains) {
+        updateWarnings(dt, arenas, players, gameTime, {
+          practiceMode,
+          onChainLaunch: options?.onChainLaunch,
+        }, currentEncounter);
+      }
     }
 
-    if (!useServerBattle) {
-      updateItemsWithRate(
-        items,
-        dt,
-        arenas,
-        currentEncounter?.modifiers.itemRespawnRateMultiplier ?? 1,
-      );
-    }
-
-    if (!useServerBattle || useDeterministicEncounterChains) {
-      updateWarnings(dt, arenas, players, gameTime, {
-        practiceMode,
-        onChainLaunch: options?.onChainLaunch,
-      }, currentEncounter);
-    }
-
-    if (!isGameOver) {
+    if (!isGameOver && !isPaused) {
 
       // ── 아이템 업데이트 ────────────────────
       // ── 아이템 획득 판정 ───────────────────
