@@ -126,8 +126,8 @@ body {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(28vw, 360px);
-  max-height: 104px;
+  max-width: min(34vw, 560px);
+  max-height: 152px;
   object-fit: contain;
   object-position: left top;
   filter:
@@ -219,8 +219,8 @@ body {
 .matchmaking-header .menu-logo {
   justify-self: start;
   margin-top: 18px;
-  max-width: min(24vw, 320px);
-  max-height: 82px;
+  max-width: min(28vw, 480px);
+  max-height: 118px;
 }
 
 .matchmaking-header .menu-nickname {
