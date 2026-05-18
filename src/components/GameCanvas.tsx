@@ -73,6 +73,10 @@ function getRoundSeed(seed: number, roundNumber: number): number {
   return hashRoundSeed(seed, 0x632be5ab ^ Math.imul(roundNumber, 0x9e3779b9));
 }
 
+function normalizeAwayTimeoutMs(timeout: number): number {
+  return timeout > 1_000 ? timeout : timeout * 1_000;
+}
+
 export default function GameCanvas({
   mode = "casual",
   roomStart,
@@ -362,9 +366,10 @@ export default function GameCanvas({
 
     const handlePlayerAway = (payload: PlayerAwayNoticePayload) => {
       if (payload.playerId !== opponentPlayer.guestId) return;
-      const deadline = Date.now() + payload.timeout;
+      const timeoutMs = normalizeAwayTimeoutMs(payload.timeout);
+      const deadline = Date.now() + timeoutMs;
       setOpponentAwayDeadline(deadline);
-      setOpponentAwaySeconds(Math.max(0, Math.ceil(payload.timeout / 1000)));
+      setOpponentAwaySeconds(Math.max(0, Math.ceil(timeoutMs / 1000)));
     };
 
     const handlePlayerBack = (payload: PlayerBackNoticePayload) => {
@@ -378,6 +383,12 @@ export default function GameCanvas({
       const syncedWins = getWinsFromScore(payload.score);
       roundWinsRef.current = syncedWins;
       setRoundWins(syncedWins);
+      setRoundNumber(payload.round);
+      roundNumberRef.current = payload.round;
+      setGameOver(true);
+      setGameOverRoomId(payload.roomId);
+      setRoundWinnerSide(payload.winnerGuestId === guestId ? "local" : "opponent");
+      setMatchPhase("round_result");
       setOpponentAwayDeadline(null);
       setOpponentAwaySeconds(null);
     };
@@ -387,6 +398,8 @@ export default function GameCanvas({
       const syncedWins = getWinsFromScore(payload.score);
       roundWinsRef.current = syncedWins;
       setRoundWins(syncedWins);
+      setGameOver(true);
+      setGameOverRoomId(payload.roomId);
       setMatchWinnerSide(payload.winnerGuestId === guestId ? "local" : "opponent");
       setMatchPhase("match_result");
       setOpponentAwayDeadline(null);
