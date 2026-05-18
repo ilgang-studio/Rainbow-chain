@@ -71,12 +71,17 @@ export function drawEncounterIntro(
   const encounterDescription = t(encounter.descriptionKey);
   const fade = Math.min(1, remaining / 0.45, (3 - remaining) / 0.45);
   const cx = canvasWidth / 2;
-  const cy = canvasHeight * 0.16;
+  const cy = Math.max(canvasHeight * 0.26, 168);
+  const panelWidth = Math.min(canvasWidth * 0.62, 620);
+  const panelHeight = Math.max(104, Math.min(128, canvasHeight * 0.16));
+  const labelSize = Math.max(12, Math.min(16, canvasHeight * 0.022));
+  const nameSize = Math.max(24, Math.min(36, canvasHeight * 0.052));
+  const bodySize = Math.max(12, Math.min(16, canvasHeight * 0.023));
 
   ctx.save();
   ctx.globalAlpha = 0.92 * fade;
   ctx.fillStyle = "rgba(0,0,0,0.7)";
-  ctx.fillRect(cx - 300, cy - 58, 600, 116);
+  ctx.fillRect(cx - panelWidth / 2, cy - panelHeight / 2, panelWidth, panelHeight);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -84,16 +89,16 @@ export function drawEncounterIntro(
   ctx.shadowColor = "#ffffff";
 
   ctx.shadowBlur = 14;
-  ctx.font = "bold 18px monospace";
-  ctx.fillText(t("encounterLabel"), cx, cy - 25);
+  ctx.font = `bold ${labelSize}px monospace`;
+  ctx.fillText(t("encounterLabel"), cx, cy - panelHeight * 0.26);
 
   ctx.shadowBlur = 24;
-  ctx.font = "bold 34px monospace";
-  ctx.fillText(encounterName, cx, cy + 8);
+  ctx.font = `bold ${nameSize}px monospace`;
+  ctx.fillText(encounterName, cx, cy + 2);
 
   ctx.shadowBlur = 8;
-  ctx.font = "17px monospace";
-  ctx.fillText(encounterDescription, cx, cy + 38);
+  ctx.font = `${bodySize}px monospace`;
+  ctx.fillText(encounterDescription, cx, cy + panelHeight * 0.3, panelWidth - 48);
   ctx.restore();
 }
 

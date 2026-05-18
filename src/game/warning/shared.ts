@@ -20,6 +20,7 @@ export interface ChainConfig {
   phaseVisibleDuration?: number; // Phase 체인 실체화 시간
   phaseHiddenDuration?:  number; // Phase 체인 비실체화 시간
   phaseFadeDuration?:    number; // Phase 체인 전환 페이드 시간
+  phaseBlinkInterval?:   number; // Phase 체인 재실체화 시 깜빡임 간격
 }
 
 export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
@@ -83,6 +84,7 @@ export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
     phaseVisibleDuration:  0.7,
     phaseHiddenDuration:   1.5,
     phaseFadeDuration:     0.12,
+    phaseBlinkInterval:    0.12,
   },
 };
 
@@ -154,12 +156,22 @@ export function getPhaseCycleVisual(elapsed: number, cfg: ChainConfig): PhaseCyc
   const visibleDur = cfg.phaseVisibleDuration ?? 0.7;
   const hiddenDur = cfg.phaseHiddenDuration ?? 0.5;
   const fadeDur = Math.min(cfg.phaseFadeDuration ?? 0.12, visibleDur * 0.5, hiddenDur * 0.5);
+  const blinkInterval = cfg.phaseBlinkInterval ?? 0;
   const cycleDur = visibleDur + hiddenDur;
   const cycleT = cycleDur > 0 ? elapsed % cycleDur : 0;
+  const cycleIndex = cycleDur > 0 ? Math.floor(elapsed / cycleDur) : 0;
   const hiddenAlpha = 0.22;
   const hiddenGlow = 0.04;
 
   if (cycleT < visibleDur - fadeDur) {
+    if (cycleIndex >= 1 && blinkInterval > 0) {
+      const blinkOn = Math.floor(cycleT / blinkInterval) % 2 === 0;
+      return {
+        solid: blinkOn,
+        linkAlpha: blinkOn ? 1 : hiddenAlpha,
+        glowAlpha: blinkOn ? 1 : hiddenGlow,
+      };
+    }
     return { solid: true, linkAlpha: 1, glowAlpha: 1 };
   }
 

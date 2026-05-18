@@ -647,52 +647,19 @@ export default function GameCanvas({
 
   return (
     <div data-room-id={roomStart?.roomId} style={{ position: "fixed", inset: 0, background: "#000" }}>
-      <div
-        style={{
-          position: "fixed",
-          top: "82px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 18,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "8px",
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            color: "rgba(255,255,255,0.9)",
-            font: "bold 12px/1 monospace",
-            letterSpacing: "0.36em",
-            textTransform: "uppercase",
-            textShadow: "0 0 10px rgba(255,255,255,0.32)",
-          }}
-        >
-          {t("round")} {roundNumber}
+      {bo3Enabled ? (
+        <div className="game-score-hud">
+          <div className="game-score-hud__round">
+            {t("round")} {roundNumber}
+          </div>
+          <div className="game-score-hud__label">
+            {t("youShort")} / {t("opponentShort")}
+          </div>
+          <div className="game-score-hud__score">
+            {myScore} - {opponentScore}
+          </div>
         </div>
-        <div
-          style={{
-            color: "rgba(255,255,255,0.62)",
-            font: "bold 10px/1 monospace",
-            letterSpacing: "0.22em",
-            textTransform: "uppercase",
-          }}
-        >
-          {t("youShort")} / {t("opponentShort")}
-        </div>
-        <div
-          style={{
-            color: "#fff",
-            font: "bold 24px/1 monospace",
-            letterSpacing: "0.2em",
-            textShadow: "0 0 16px rgba(255,255,255,0.5)",
-          }}
-        >
-          {myScore} - {opponentScore}
-        </div>
-      </div>
+      ) : null}
       <canvas
         ref={canvasRef}
         style={{
