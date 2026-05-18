@@ -156,19 +156,6 @@ export default function GameCanvas({
     ];
   };
 
-  useEffect(() => {
-    if (!isOnline || !roomStart) return;
-    const syncedWins = getWinsFromScore(roomStart.score);
-    roundWinsRef.current = syncedWins;
-    setRoundWins(syncedWins);
-    roundNumberRef.current = roomStart.round;
-    setRoundNumber(roomStart.round);
-    if (roomStart.roundState === "playing") {
-      setRoundPresentation(roomStart.seed, roomStart.round);
-      resetRoundSurface();
-    }
-  }, [guestId, isOnline, roomStart]);
-
   const setRoundPresentation = (seed: number, nextRoundNumber: number) => {
     const theme = getRoundTheme(seed, nextRoundNumber);
     setRoundTheme(theme);
@@ -183,6 +170,19 @@ export default function GameCanvas({
     setCountdownValue(null);
     setMatchPhase("playing");
   };
+
+  useEffect(() => {
+    if (!isOnline || !roomStart) return;
+    const syncedWins = getWinsFromScore(roomStart.score);
+    roundWinsRef.current = syncedWins;
+    setRoundWins(syncedWins);
+    roundNumberRef.current = roomStart.round;
+    setRoundNumber(roomStart.round);
+    if (roomStart.roundState === "playing") {
+      setRoundPresentation(roomStart.seed, roomStart.round);
+      resetRoundSurface();
+    }
+  }, [guestId, isOnline, roomStart]);
 
   const beginLocalRound = (nextRoundNumber: number, resetMatch = false) => {
     if (resetMatch) {

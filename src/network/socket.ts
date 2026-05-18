@@ -26,6 +26,13 @@ export async function prepareSocketAuth(guestId: string, nickname: string): Prom
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const errorCode = typeof data?.error === "string" ? data.error.trim() : "";
+    if (errorCode === "SERVER_CONFIG_MISSING") {
+      throw new Error("Matchmaking server configuration error.");
+    }
+    if (errorCode === "TOKEN_SIGN_FAILED") {
+      throw new Error("Failed to issue matchmaking token.");
+    }
     throw new Error(
       typeof data?.message === "string" && data.message.trim()
         ? data.message
