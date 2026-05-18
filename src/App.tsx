@@ -566,8 +566,9 @@ export default function App() {
   const roomReadyTimerRef = useRef<number | null>(null);
   const resetMatchmakingStateRef = useRef<() => void>(() => {});
   const runScreenTransitionRef = useRef<(label: string, applyChange: () => void) => void>(() => {});
-  const fallbackMatchmakingToAiRef = useRef<(reason: string) => void>(() => {});
+  const fallbackMatchmakingToAiRef = useRef<(reason: string, errorMessage?: string) => void>(() => {});
   const aiQueueTimeoutRef = useRef<number | null>(null);
+  const errorFallbackTimerRef = useRef<number | null>(null);
   const transitionTimersRef = useRef<number[]>([]);
   const transitionBusyRef = useRef(false);
 
@@ -578,6 +579,9 @@ export default function App() {
       }
       if (aiQueueTimeoutRef.current !== null) {
         window.clearTimeout(aiQueueTimeoutRef.current);
+      }
+      if (errorFallbackTimerRef.current !== null) {
+        window.clearTimeout(errorFallbackTimerRef.current);
       }
       for (const timerId of transitionTimersRef.current) window.clearTimeout(timerId);
       transitionTimersRef.current = [];
@@ -755,6 +759,13 @@ export default function App() {
     }
   };
 
+  const clearErrorFallbackTimer = () => {
+    if (errorFallbackTimerRef.current !== null) {
+      window.clearTimeout(errorFallbackTimerRef.current);
+      errorFallbackTimerRef.current = null;
+    }
+  };
+
   const resetMatchmakingState = () => {
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
@@ -764,21 +775,36 @@ export default function App() {
     setMatchmakingDetail(t("searchingOpponent"));
   };
 
-  const fallbackMatchmakingToAi = (reason: string) => {
+  const fallbackMatchmakingToAi = (reason: string, errorMessage?: string) => {
     console.warn("[matchmaking:fallback_ai]", reason);
     clearAiQueueTimeout();
+    clearErrorFallbackTimer();
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
     socket.disconnect();
     clearTransitionTimers();
     setTransitionActive(false);
     transitionBusyRef.current = false;
-    runScreenTransition(t("deployingAi"), () => {
-      resetMatchmakingState();
-      setActiveRoomStart(null);
-      setView("menu");
-      setSelectedMode("casual");
-    });
+
+    const doTransition = () => {
+      runScreenTransition(t("deployingAi"), () => {
+        resetMatchmakingState();
+        setActiveRoomStart(null);
+        setView("menu");
+        setSelectedMode("casual");
+      });
+    };
+
+    if (errorMessage) {
+      setMatchmakingStatus("QUEUE ERROR");
+      setMatchmakingDetail(errorMessage);
+      errorFallbackTimerRef.current = window.setTimeout(() => {
+        errorFallbackTimerRef.current = null;
+        doTransition();
+      }, 2500);
+    } else {
+      doTransition();
+    }
   };
 
   const runScreenTransition = (label: string, applyChange: () => void) => {
@@ -816,7 +842,7 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Socket authentication failed.";
       console.error("[socket:auth_error]", message);
-      fallbackMatchmakingToAi(message);
+      fallbackMatchmakingToAi(message, message);
     }
   };
 
@@ -864,6 +890,7 @@ export default function App() {
 
   const cancelMatchmaking = () => {
     clearAiQueueTimeout();
+    clearErrorFallbackTimer();
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
 
@@ -896,14 +923,15 @@ export default function App() {
     const handleConnectError = (error: Error) => {
       console.error("[socket:connect_error]", error.message);
       if (viewRef.current !== "matchmaking") return;
-      fallbackMatchmakingToAi(error.message || t("connectingToServer"));
+      const msg = error.message || "Connection failed";
+      fallbackMatchmakingToAiRef.current(msg, msg);
     };
 
     const handleDisconnect = (reason: string) => {
       console.warn("[socket:disconnect]", reason);
       if (viewRef.current !== "matchmaking") return;
       if (pendingQueueJoinRef.current == null) return;
-      fallbackMatchmakingToAi(reason);
+      fallbackMatchmakingToAiRef.current(reason, reason);
     };
 
     const handleQueueJoined = () => {
@@ -987,7 +1015,7 @@ export default function App() {
     const handleSocketError = ({ message }: ErrorPayload) => {
       console.error(message);
       if (viewRef.current !== "matchmaking") return;
-      fallbackMatchmakingToAi(message);
+      fallbackMatchmakingToAiRef.current(message, message);
     };
 
     socket.on("connect", handleConnect);
