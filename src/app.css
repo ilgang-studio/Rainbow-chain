@@ -126,8 +126,8 @@ body {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(34vw, 560px);
-  max-height: 152px;
+  max-width: min(28vw, 480px);
+  max-height: 118px;
   object-fit: contain;
   object-position: left top;
   filter:
