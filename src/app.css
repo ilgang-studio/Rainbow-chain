@@ -112,6 +112,7 @@ body {
   margin-bottom: 72px;
 }
 
+.menu-logo,
 .menu-title,
 .menu-nickname,
 .menu-button {
@@ -119,6 +120,19 @@ body {
   text-shadow:
     0 0 calc(8px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.22),
     0 0 calc(18px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.16);
+}
+
+.menu-logo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(28vw, 360px);
+  max-height: 104px;
+  object-fit: contain;
+  object-position: left top;
+  filter:
+    drop-shadow(0 0 calc(8px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.34))
+    drop-shadow(0 0 calc(22px * var(--menu-glow-strength)) rgba(255, 255, 255, 0.22));
 }
 
 .menu-title {
@@ -202,9 +216,11 @@ body {
   padding: 0 36px;
 }
 
-.matchmaking-header .menu-title {
+.matchmaking-header .menu-logo {
   justify-self: start;
-  padding-top: 18px;
+  margin-top: 18px;
+  max-width: min(24vw, 320px);
+  max-height: 82px;
 }
 
 .matchmaking-header .menu-nickname {

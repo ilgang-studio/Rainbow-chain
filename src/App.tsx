@@ -22,6 +22,7 @@ import battleTrackA from "./assets/Nervous Footsteps.mp3";
 import battleTrackB from "./assets/Submerged Split.mp3";
 import battleTrackC from "./assets/Tilted Piano Room.mp3";
 import mainThemeTrack from "./assets/mainthema.mp3";
+import logoImage from "./assets/logo.png";
 import "./app.css";
 
 const MENU_ITEMS = [
@@ -187,7 +188,7 @@ function MainMenu({
         <MenuBackground particleCount={particleCount} />
 
         <header className="menu-header">
-          <h1 className="menu-title">Rainbow-chain</h1>
+          <img className="menu-logo" src={logoImage} alt="Rainbow Chain" />
           <div className="menu-nickname">{nickname}</div>
         </header>
 
@@ -352,7 +353,7 @@ function MatchmakingView({
         <MenuBackground particleCount={particleCount} />
 
         <header className="matchmaking-header">
-          <h1 className="menu-title">Rainbow-chain</h1>
+          <img className="menu-logo" src={logoImage} alt="Rainbow Chain" />
           <div className="matchmaking-timer-wrap">
             <div className="matchmaking-timer">{formatQueueTime(elapsedSeconds)}</div>
           </div>
