@@ -768,6 +768,7 @@ export default function App() {
   };
 
   const resetMatchmakingState = () => {
+    clearAiQueueTimeout();
     clearRoomReadyTimer();
     pendingQueueJoinRef.current = null;
     setQueueSeconds(0);
@@ -850,19 +851,12 @@ export default function App() {
   const beginMatchmaking = (mode: QueueMode) => {
     const identity = ensureGuestIdentity();
     resetMatchmakingState();
-    clearAiQueueTimeout();
 
     const payload: QueueJoinPayload = {
       mode,
       nickname: identity.nickname,
       guestId: identity.guestId,
     };
-
-    aiQueueTimeoutRef.current = window.setTimeout(() => {
-      aiQueueTimeoutRef.current = null;
-      if (viewRef.current !== "matchmaking") return;
-      fallbackMatchmakingToAiRef.current("10s queue timeout");
-    }, 10_000);
 
     runScreenTransition(t("matchmaking"), () => {
       setView("matchmaking");
