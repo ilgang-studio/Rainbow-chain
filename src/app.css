@@ -704,7 +704,7 @@ body {
 
 .game-score-hud {
   position: fixed;
-  top: clamp(78px, 12vh, 118px);
+  top: clamp(58px, 9vh, 88px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 24;
